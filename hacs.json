@@ -1,0 +1,5 @@
+{
+  "name": "open3e Gateway (ESP32)",
+  "homeassistant": "2026.11.0",
+  "render_readme": true
+}

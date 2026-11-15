@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "open3e-Gateway",
+        "description": "IP-Adresse oder Hostname des open3e-esp32-Gateways.",
+        "data": {
+          "host": "Host"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "HTTP-API des Gateways nicht erreichbar.",
+      "no_database": "Auf dem Gateway ist keine open3e-Datenpunkt-Datenbank geladen."
+    },
+    "abort": {
+      "already_configured": "Diese Wärmepumpe ist bereits eingerichtet."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Abfrage",
+        "data": {
+          "scan_interval": "Aktualisierungsintervall (s)",
+          "live_min_interval": "Mindestintervall je Datenpunkt ohne /api/values (s)"
+        },
+        "data_description": {
+          "scan_interval": "Mit /api/values erzeugt eine Aktualisierung keinen CAN-Verkehr.",
+          "live_min_interval": "Nur bei älterer Gateway-Firmware: Dann wird jeder Datenpunkt live über CAN gelesen."
+        }
+      }
+    }
+  }
+}

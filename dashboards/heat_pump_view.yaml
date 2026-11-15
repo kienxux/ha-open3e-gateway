@@ -1,0 +1,94 @@
+# Example view for the open3e_gateway integration (entity ids as created by
+# v0.1.0 for a Vitocal 150-A; adjust if your device names differ).
+# Paste into a dashboard: Edit dashboard -> Raw configuration editor -> views.
+title: Wärmepumpe
+path: waermepumpe
+icon: mdi:heat-pump
+type: sections
+sections:
+  - type: grid
+    cards:
+      - type: heading
+        heading: Status
+      - type: tile
+        entity: binary_sensor.hpmumaster_0x680_compressor_running
+        name: Verdichter
+      - type: tile
+        entity: binary_sensor.hpmumaster_0x680_electric_heater_running
+        name: Heizstab
+      - type: tile
+        entity: sensor.hpmumaster_0x680_four_three_way_valve_valve_current_position
+        name: Ventil
+      - type: tile
+        entity: sensor.hpmumaster_0x680_current_electrical_power_consumption_system
+        name: Elektrische Leistung
+      - type: tile
+        entity: sensor.hpmumaster_0x680_current_thermal_capacity_system
+        name: Thermische Leistung
+      - type: tile
+        entity: sensor.hpmumaster_0x680_error_dtc_list
+        name: Aktive Fehler
+  - type: grid
+    cards:
+      - type: heading
+        heading: Heizkreis
+      - type: tile
+        entity: sensor.hpmumaster_0x680_outside_temperature_sensor_actual
+        name: Außen
+      - type: tile
+        entity: sensor.hpmumaster_0x680_mixer_one_circuit_flow_temperature_sensor_actual
+        name: Vorlauf HK1
+      - type: tile
+        entity: sensor.hpmumaster_0x680_return_temperature_sensor_actual
+        name: Rücklauf
+      - type: tile
+        entity: number.hpmumaster_0x680_mixer_one_circuit_room_temperature_setpoint_standard
+        name: Raumsoll Normal
+        features:
+          - type: numeric-input
+            style: buttons
+      - type: tile
+        entity: number.hpmumaster_0x680_mixer_one_circuit_central_heating_curve_level
+        name: Heizkurve Niveau
+        features:
+          - type: numeric-input
+            style: buttons
+  - type: grid
+    cards:
+      - type: heading
+        heading: Warmwasser
+      - type: tile
+        entity: sensor.hpmumaster_0x680_domestic_hot_water_sensor_actual
+        name: Speicher
+      - type: tile
+        entity: number.hpmumaster_0x680_domestic_hot_water_temperature_setpoint
+        name: Soll
+        features:
+          - type: numeric-input
+            style: buttons
+      - type: tile
+        entity: switch.hpmumaster_0x680_hot_water_one_time_charge
+        name: Einmalladung
+  - type: grid
+    cards:
+      - type: heading
+        heading: Verlauf
+      - type: history-graph
+        hours_to_show: 24
+        entities:
+          - entity: sensor.hpmumaster_0x680_outside_temperature_sensor_actual
+            name: Außen
+          - entity: sensor.hpmumaster_0x680_flow_temperature_sensor_actual
+            name: Vorlauf
+          - entity: sensor.hpmumaster_0x680_domestic_hot_water_sensor_actual
+            name: Warmwasser
+      - type: statistics-graph
+        chart_type: bar
+        period: day
+        days_to_show: 14
+        stat_types: [change]
+        entities:
+          - entity: sensor.hpmumaster_0x680_energy_consumption_central_heating_today
+            name: Strom Heizen
+          - entity: sensor.hpmumaster_0x680_energy_consumption_domestic_hot_water_today
+            name: Strom WW

@@ -1,0 +1,35 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "open3e gateway",
+        "description": "IP address or host name of the open3e-esp32 gateway.",
+        "data": {
+          "host": "Host"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach the gateway's HTTP API.",
+      "no_database": "The gateway has no open3e datapoint database loaded."
+    },
+    "abort": {
+      "already_configured": "This heat pump is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling",
+        "data": {
+          "scan_interval": "Refresh interval (s)",
+          "live_min_interval": "Minimum interval per datapoint without /api/values (s)"
+        },
+        "data_description": {
+          "scan_interval": "With /api/values a refresh causes no CAN traffic.",
+          "live_min_interval": "Only used with older gateway firmware: each datapoint is then read live over CAN."
+        }
+      }
+    }
+  }
+}

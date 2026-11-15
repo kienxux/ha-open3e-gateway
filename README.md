@@ -1,0 +1,51 @@
+# open3e Gateway (ESP32) for Home Assistant
+
+A custom integration for Viessmann E3 heat pumps (tested with a Vitocal 150-A)
+through an [open3e-esp32](https://github.com/boonkerz/open3e-esp32) gateway. It
+uses the gateway's local HTTP API. MQTT is not needed.
+
+## Features
+
+- Setup in the UI with the gateway's IP address.
+- One entity for each field of every datapoint selected on the gateway: sensors
+  (with units and device classes), enum text sensors and binary sensors. Min,
+  max, average and status fields are created disabled.
+- **Controls only where the gateway has a write limit.** A field becomes a
+  `number` only if its datapoint has a `range` in the gateway's selection. The
+  gateway enforces that limit on every write. Datapoints that the open3e DB
+  marks read-only (e.g. 880 heating curve) are written with `force`. The limit
+  still applies.
+- Hot water one-time charge as a switch. Its state is the request (DID 1006).
+  The heat pump's own state (1007) is in the `active` attribute and has its
+  own binary sensor.
+- Running sensors for the compressor (2351) and electric heater (2352).
+- Read-back after every write (the gateway does not republish).
+- Gateway diagnostics: WLAN signal, CAN state and errors, poll failures.
+
+## Bus load
+
+Gateway firmware with `GET /api/values` returns the poller's cached values, so
+a refresh causes no CAN traffic (default every 30 s). With older firmware the
+integration reads each datapoint live, but not more often than its gateway
+interval and not more often than the "minimum interval" option (default 120 s).
+The `can_state` diagnostic sensor shows which mode is active.
+
+## Installation (HACS)
+
+HACS → Custom repositories → add this repository as type *Integration* →
+install → restart HA → Settings → Devices & services → Add → "open3e Gateway".
+
+Requires Home Assistant 2026.11 or newer.
+
+## Choosing datapoints
+
+The gateway's selection decides which entities exist. Add or remove
+datapoints, or set write limits, in the gateway's web UI (Datenpunkte). The
+integration checks the selection every 5 minutes and reloads itself when it
+changes. Entities of removed datapoints are deleted. To apply a change at once,
+reload the integration. Changing only the polling interval or the topic does
+not trigger a reload.
+
+## Security
+
+The gateway's HTTP API has no authentication. Use it on a trusted LAN only.
