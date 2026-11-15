@@ -88,3 +88,7 @@ not trigger a reload.
 ## Security
 
 The gateway's HTTP API has no authentication. Use it on a trusted LAN only.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
