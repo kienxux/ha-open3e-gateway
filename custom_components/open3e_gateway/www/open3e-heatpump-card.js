@@ -10,7 +10,7 @@
  * Entities are found through the integration (websocket open3e_gateway/entities),
  * so renamed entities keep working. No external libraries.
  */
-const VERSION = "0.3.0";
+const VERSION = "0.3.1";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {

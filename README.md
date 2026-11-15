@@ -19,10 +19,10 @@ uses the gateway's local HTTP API. MQTT is not needed.
   The heat pump's own state (1007) is in the `active` attribute and has its
   own binary sensor.
 - Running sensors for the compressor (2351) and electric heater (2352).
-- **Heating circuit flow** as a `climate`: current = circuit flow (284),
-  target = flow setpoint (987). A new target shifts the heating curve level
-  (880) by the difference, 1 K per level step (measured on a Vitocal 150-A),
-  within the gateway's limit for the level.
+- **Heating circuit flow** as a read-only `climate`: current = circuit flow
+  (284), flow setpoint (987) as attribute. The setpoint is not set directly:
+  change the heating curve level (number entity of 880) instead; one step
+  moves the flow setpoint by 1 K (measured on a Vitocal 150-A).
 - **Hot water** as a `water_heater` (temperature, setpoint 396, operation mode
   heat_pump / high_demand = one-time charge).
 - Derived sensors: operating state (off / standby / heating / hot water /
