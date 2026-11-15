@@ -24,7 +24,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import Open3eConfigEntry
 from .coordinator import Open3eCoordinator
-from .entity import Open3eFieldEntity, gateway_device_info, add_tracked
+from . import logic as L
+from .entity import Open3eCuratedEntity, Open3eFieldEntity, gateway_device_info, add_tracked
 from .model import Field, enum_id, enum_text
 
 UNIT_DEVICE_CLASS: dict[str, SensorDeviceClass] = {
@@ -59,6 +60,7 @@ async def async_setup_entry(
     entities.extend(
         GatewaySensor(coordinator, entry.entry_id, desc) for desc in GATEWAY_SENSORS
     )
+    entities.extend(derived_sensors(coordinator, entry.entry_id))
     add_tracked(coordinator, async_add_entities, entities)
 
 
@@ -197,3 +199,58 @@ class GatewaySensor(CoordinatorEntity[Open3eCoordinator], SensorEntity):
             return None
         mode = {True: "cached (/api/values)", False: "live reads", None: "unknown"}
         return {"value_source": mode[self.coordinator.cached_api]}
+
+
+# ---------------------------------------------------------------- derived
+
+class OperatingStateSensor(Open3eCuratedEntity, SensorEntity):
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = L.OPERATING_STATES
+
+    def __init__(self, coordinator: Open3eCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "operating_state", "open3e_betriebszustand", "sensor")
+
+    @property
+    def native_value(self) -> str | None:
+        return L.operating_state(self.data)
+
+
+class CopSensor(Open3eCuratedEntity, SensorEntity):
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 2
+    _attr_icon = "mdi:heat-pump-outline"
+
+    def __init__(self, coordinator: Open3eCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "cop", "open3e_cop_aktuell", "sensor")
+
+    @property
+    def native_value(self) -> float | None:
+        return L.cop(self.data)
+
+
+class SpreadSensor(Open3eCuratedEntity, SensorEntity):
+    # A temperature difference: no temperature device class, or HA would
+    # convert "K" as if it were an absolute temperature.
+    _attr_native_unit_of_measurement = "K"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 1
+    _attr_icon = "mdi:thermometer-lines"
+
+    def __init__(self, coordinator: Open3eCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator, entry_id, "spread", "open3e_spreizung", "sensor")
+
+    @property
+    def native_value(self) -> float | None:
+        return L.spread(self.data)
+
+
+def derived_sensors(coordinator: Open3eCoordinator, entry_id: str) -> list[SensorEntity]:
+    m = coordinator.model
+    out: list[SensorEntity] = []
+    if m.has(L.ECU, L.DID_COMPRESSOR):
+        out.append(OperatingStateSensor(coordinator, entry_id))
+    if m.has(L.ECU, L.DID_POWER_EL) and m.has(L.ECU, L.DID_POWER_TH) and m.has(L.ECU, L.DID_COMPRESSOR):
+        out.append(CopSensor(coordinator, entry_id))
+    if m.has(L.ECU, L.DID_FLOW) and m.has(L.ECU, L.DID_RETURN):
+        out.append(SpreadSensor(coordinator, entry_id))
+    return out

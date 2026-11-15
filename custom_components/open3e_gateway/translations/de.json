@@ -31,5 +31,59 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "operating_state": {
+        "name": "Betriebszustand",
+        "state": {
+          "off": "Aus",
+          "standby": "Bereit",
+          "heating": "Heizen",
+          "dhw": "Warmwasser",
+          "heater": "Heizstab"
+        }
+      },
+      "cop": {
+        "name": "COP aktuell"
+      },
+      "spread": {
+        "name": "Spreizung Vorlauf/Rücklauf"
+      }
+    },
+    "binary_sensor": {
+      "compressor_running": {
+        "name": "Verdichter läuft"
+      },
+      "heater_running": {
+        "name": "Heizstab läuft"
+      }
+    },
+    "switch": {
+      "dhw_one_time_charge": {
+        "name": "Warmwasser-Einmalladung"
+      }
+    },
+    "water_heater": {
+      "dhw": {
+        "name": "Warmwasser"
+      }
+    },
+    "climate": {
+      "heating_circuit": {
+        "name": "Heizkreis"
+      }
+    }
+  },
+  "device": {
+    "heat_pump": {
+      "name": "Wärmepumpe"
+    },
+    "refrigerant_circuit": {
+      "name": "Kältekreis"
+    },
+    "ehcu": {
+      "name": "Wärmepumpe EHCU"
+    }
   }
 }

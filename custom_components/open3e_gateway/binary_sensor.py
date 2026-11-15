@@ -58,7 +58,8 @@ class PowerStateSensor(Open3eEntity, BinarySensorEntity):
         super().__init__(coordinator, entry_id, ecu)
         self._key = (ecu, did)
         self._attr_unique_id = f"{entry_id}_{key}"
-        self._attr_name = name
+        self._attr_translation_key = key
+        self.entity_id = f"binary_sensor.open3e_{'electric_heater_running' if key == 'heater_running' else key}"
 
     @property
     def _state(self) -> Any:

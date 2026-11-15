@@ -12,6 +12,10 @@ from .coordinator import Open3eCoordinator
 from .model import Field
 
 
+# Known ECUs of a Vitocal 150-A get readable, translated device names.
+DEVICE_KEYS = {0x680: "heat_pump", 0x68C: "refrigerant_circuit", 0x6CF: "ehcu"}
+
+
 def add_tracked(coordinator: Open3eCoordinator, async_add_entities, entities) -> None:
     """Add entities and remember their unique ids (including ones that are
     disabled and never reach hass), for removing stale registry entries."""
@@ -35,9 +39,13 @@ def gateway_device_info(coordinator: Open3eCoordinator, entry_id: str) -> Device
 def ecu_device_info(coordinator: Open3eCoordinator, entry_id: str, ecu: int) -> DeviceInfo:
     dev = coordinator.model.devices.get(ecu)
     name = f"{dev.name} (0x{ecu:03x})" if dev else f"ECU 0x{ecu:03x}"
+    key = DEVICE_KEYS.get(ecu)
     return DeviceInfo(
         identifiers={(DOMAIN, f"{entry_id}_0x{ecu:03x}")},
-        name=name,
+        # Translated name for known ECUs (e.g. "Wärmepumpe"); a name set by
+        # the user in HA always wins.
+        translation_key=key,
+        name=None if key else name,
         manufacturer=MANUFACTURER,
         model=dev.model if dev else None,
         sw_version=dev.sw if dev else None,
@@ -54,6 +62,37 @@ class Open3eEntity(CoordinatorEntity[Open3eCoordinator]):
         super().__init__(coordinator)
         self._entry_id = entry_id
         self._attr_device_info = ecu_device_info(coordinator, entry_id, ecu)
+
+
+class Open3eCuratedEntity(Open3eEntity):
+    """A hand-made entity with a fixed entity id and a translated name, so
+    dashboards and automations can rely on it."""
+
+    def __init__(self, coordinator: Open3eCoordinator, entry_id: str, key: str,
+                 object_id: str, domain: str, ecu: int = 0x680) -> None:
+        super().__init__(coordinator, entry_id, ecu)
+        self._attr_unique_id = f"{entry_id}_{key}"
+        self._attr_translation_key = key
+        # Only a suggestion for the first registration; a user rename wins.
+        self.entity_id = f"{domain}.{object_id}"
+
+    @property
+    def data(self) -> dict:
+        return self.coordinator.data or {}
+
+    def field(self, key: str):
+        return self.coordinator.model.field_by_key(key)
+
+    async def write(self, ecu: int, did: int, value, *, force: bool, what: str) -> None:
+        from homeassistant.exceptions import HomeAssistantError
+
+        from .api import GatewayWriteError
+
+        try:
+            await self.coordinator.api.write(ecu, did, value, force=force)
+        except GatewayWriteError as err:
+            raise HomeAssistantError(f"{what}: {err}") from err
+        await self.coordinator.async_read_back(ecu, did)
 
 
 class Open3eFieldEntity(Open3eEntity):

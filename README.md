@@ -19,6 +19,15 @@ uses the gateway's local HTTP API. MQTT is not needed.
   The heat pump's own state (1007) is in the `active` attribute and has its
   own binary sensor.
 - Running sensors for the compressor (2351) and electric heater (2352).
+- **Hot water** as a `water_heater` (temperature, setpoint 396, operation mode
+  heat_pump / high_demand = one-time charge) and **heating circuit 1** as a
+  `climate` (room setpoint "Standard" 424; mode and program from 1415 are
+  shown, not changed; `hvac_action` = heating while the compressor heats the
+  circuit).
+- Derived sensors: operating state (off / standby / heating / hot water /
+  electric heater), current COP (thermal / electrical power while the
+  compressor runs) and flow/return spread.
+- German and English names; ECU devices are named "Wärmepumpe", "Kältekreis".
 - Read-back after every write (the gateway does not republish).
 - Gateway diagnostics: WLAN signal, CAN state and errors, poll failures.
 

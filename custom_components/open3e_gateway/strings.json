@@ -31,5 +31,59 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "operating_state": {
+        "name": "Operating state",
+        "state": {
+          "off": "Off",
+          "standby": "Standby",
+          "heating": "Heating",
+          "dhw": "Hot water",
+          "heater": "Electric heater"
+        }
+      },
+      "cop": {
+        "name": "COP current"
+      },
+      "spread": {
+        "name": "Flow/return spread"
+      }
+    },
+    "binary_sensor": {
+      "compressor_running": {
+        "name": "Compressor running"
+      },
+      "heater_running": {
+        "name": "Electric heater running"
+      }
+    },
+    "switch": {
+      "dhw_one_time_charge": {
+        "name": "Hot water one-time charge"
+      }
+    },
+    "water_heater": {
+      "dhw": {
+        "name": "Hot water"
+      }
+    },
+    "climate": {
+      "heating_circuit": {
+        "name": "Heating circuit"
+      }
+    }
+  },
+  "device": {
+    "heat_pump": {
+      "name": "Heat pump"
+    },
+    "refrigerant_circuit": {
+      "name": "Refrigerant circuit"
+    },
+    "ehcu": {
+      "name": "Heat pump EHCU"
+    }
   }
 }

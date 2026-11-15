@@ -26,12 +26,13 @@ async def async_setup_entry(
 
 
 class DhwOneTimeChargeSwitch(Open3eEntity, SwitchEntity):
-    _attr_name = "Hot water one-time charge"
+    _attr_translation_key = "dhw_one_time_charge"
     _attr_icon = "mdi:water-boiler"
 
     def __init__(self, coordinator: Open3eCoordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, ECU_MAIN)
         self._attr_unique_id = f"{entry_id}_dhw_one_time_charge"
+        self.entity_id = "switch.open3e_dhw_one_time_charge"
 
     def _required(self, did: int) -> bool | None:
         value = (self.coordinator.data or {}).get((ECU_MAIN, did))

@@ -12,7 +12,7 @@ DEFAULT_SCAN_INTERVAL = 30
 # more often than its own interval on the gateway and never below this value.
 DEFAULT_LIVE_MIN_INTERVAL = 120
 
-PLATFORMS = ["sensor", "binary_sensor", "number", "switch"]
+PLATFORMS = ["sensor", "binary_sensor", "number", "switch", "water_heater", "climate"]
 
 # Curated entities (Vitocal 150-A on HPMUMASTER).
 ECU_MAIN = 0x680
