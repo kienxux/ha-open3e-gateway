@@ -10,7 +10,7 @@
  * Entities are found through the integration (websocket open3e_gateway/entities),
  * so renamed entities keep working. No external libraries.
  */
-const VERSION = "0.3.1";
+const VERSION = "0.3.2";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
@@ -34,17 +34,20 @@ const KEYS = {
   errors: "0x680_265_value",
   power_el: "0x680_2488_value",
   power_th: "0x680_2496_value",
+  el_heat_today: "0x680_548_Today",
+  el_dhw_today: "0x680_565_Today",
+  th_heat_today: "0x680_1211_Today",
+  th_dhw_today: "0x680_1391_Today",
 };
 
-const DEFAULT_TILES = [
-  "circuit", "compressor", "flow_target", "flow_hk",
-  "flow_wp", "level", "dhw", "dhw_set", "one_time", "heater",
-];
+// flow_hk and dhw show actual / target in one tile; flow_target, dhw_set,
+// return and heater can still be added through `tiles`.
+const DEFAULT_TILES = ["circuit", "compressor", "flow_hk", "flow_wp", "level", "dhw", "one_time"];
 
 const TEXT = {
   de: {
     title: "Wärmepumpe", circuit: "Heizkreis", compressor: "Verdichter", flow_target: "Vorlauf-Soll",
-    flow_hk: "HK Vorlauf", flow_wp: "WP Vorlauf", return: "Rücklauf", level: "Niveau", dhw: "Warmwasser",
+    flow_hk: "HK Vorlauf Ist/Soll", flow_wp: "WP Vorlauf", return: "Rücklauf", level: "Niveau", dhw: "Warmwasser Ist/Soll", today: "Ø heute",
     dhw_set: "WW-Soll", one_time: "Einmalladung", heater: "Heizstab", outside: "Außen", errors: "Fehler",
     power: "Leistung", on: "An", off: "Aus", missing: "Integration open3e Gateway nicht gefunden",
     modes: { Off: "Aus", Heating: "Heizen", Automatic: "Automatik", Cooling: "Kühlen",
@@ -53,7 +56,7 @@ const TEXT = {
   },
   en: {
     title: "Heat pump", circuit: "Heating circuit", compressor: "Compressor", flow_target: "Flow target",
-    flow_hk: "Circuit flow", flow_wp: "Heat pump flow", return: "Return", level: "Curve level", dhw: "Hot water",
+    flow_hk: "Circuit flow act/target", flow_wp: "Heat pump flow", return: "Return", level: "Curve level", dhw: "Hot water act/target", today: "today",
     dhw_set: "DHW target", one_time: "One-time charge", heater: "Heater", outside: "Outside", errors: "errors",
     power: "Power", on: "On", off: "Off", missing: "open3e Gateway integration not found", modes: {},
   },
@@ -129,6 +132,11 @@ class Open3eHeatpumpCard extends HTMLElement {
     return this._hass.formatEntityState ? this._hass.formatEntityState(s) : `${s.state} ${s.attributes.unit_of_measurement || ""}`;
   }
 
+  _n(x, digits = 1) {
+    return x === null ? "–" : x.toLocaleString(this._hass.locale?.language || "en",
+      { maximumFractionDigits: 1, minimumFractionDigits: digits });
+  }
+
   _on(tile) { const s = this._st(tile); return s ? s.state === "on" : null; }
 
   _tile(tile) {
@@ -154,8 +162,9 @@ class Open3eHeatpumpCard extends HTMLElement {
       }
       case "flow_target": color = C.heat; break;
       case "flow_hk": {
-        const d = this._num("flow_hk") !== null && this._num("flow_target") !== null
-          ? this._num("flow_hk") - this._num("flow_target") : null;
+        const act = this._num("flow_hk"), target = this._num("flow_target");
+        value = `${this._n(act)} / ${this._n(target)} °C`;
+        const d = act !== null && target !== null ? act - target : null;
         color = d === null ? C.off : Math.abs(d) <= 2 ? C.ok : d < 0 ? C.water : C.heat;
         if (d !== null) sub = `${d > 0 ? "+" : ""}${d.toFixed(1)} K`;
         break;
@@ -176,6 +185,7 @@ class Open3eHeatpumpCard extends HTMLElement {
       }
       case "dhw": {
         const v = this._num("dhw"), set = this._num("dhw_set"), hyst = this._num("dhw_hyst_on");
+        value = `${this._n(v)} / ${this._n(set, 0)} °C`;
         const charging = this._on("dhw_charging") || opState === "dhw";
         if (charging) { color = C.water; sub = "lädt"; }
         else if (v !== null && set !== null && v < set - (hyst ?? 5)) color = C.bad;
@@ -198,10 +208,11 @@ class Open3eHeatpumpCard extends HTMLElement {
       }
       case "return": color = C.info; break;
     }
-    const id = this._id(tile);
+    // The hot water tile opens the setpoint, which is the part that can be changed.
+    const id = tile === "dhw" ? this._id("dhw_set") || this._id("dhw") : this._id(tile);
     return `<div class="tile${id ? " click" : ""}" data-entity="${id || ""}" style="--c:${color}">
       <div class="icon"><ha-icon icon="${ICONS[tile] || "mdi:information"}"></ha-icon></div>
-      <div class="txt"><div class="val">${value}${sub ? `<span class="sub">${sub}</span>` : ""}</div>
+      <div class="txt"><div class="val"><span>${value}</span>${sub ? `<span class="sub">${sub}</span>` : ""}</div>
       <div class="name">${t[tile] || tile}</div></div></div>`;
   }
 
@@ -212,7 +223,14 @@ class Open3eHeatpumpCard extends HTMLElement {
     const color = { heating: C.heat, dhw: C.water, heater: C.bad, standby: C.ok, off: C.off }[key] || C.off;
     const chip = st ? `<span class="chip" style="--c:${color}">${this._fmt("state")}</span>` : "";
     const cop = this._num("cop");
-    const copColor = cop === null ? C.off : cop >= 3.5 ? C.ok : cop >= 2.5 ? C.warn : C.bad;
+    // Daily COP from the heat pump's own energy counters (heating + hot water).
+    const el = (this._num("el_heat_today") ?? 0) + (this._num("el_dhw_today") ?? 0);
+    const th = (this._num("th_heat_today") ?? 0) + (this._num("th_dhw_today") ?? 0);
+    const copDay = el > 0.5 ? th / el : null;
+    // Colour from the daily value when there is one: the instantaneous COP swings
+    // with defrosting, buffer charging and compressor load.
+    const ref = copDay ?? cop;
+    const copColor = ref === null ? C.off : ref >= 3.5 ? C.ok : ref >= 2.5 ? C.warn : C.bad;
     const errors = this._num("errors");
     const pe = this._num("power_el"), pt = this._num("power_th");
     const kw = (w) => (w / 1000).toLocaleString(this._hass.locale?.language || "en", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
@@ -225,7 +243,7 @@ class Open3eHeatpumpCard extends HTMLElement {
         ${errors ? `<span class="chip" style="--c:${C.bad}">${errors} ${t.errors}</span>` : ""}
         <span class="meta click" data-entity="${this._id("outside") || ""}"><ha-icon icon="mdi:thermometer"></ha-icon>${t.outside} ${this._fmt("outside")}</span>
         ${power}
-        ${cop !== null ? `<span class="chip click" data-entity="${this._id("cop")}" style="--c:${copColor}">COP ${cop.toLocaleString(this._hass.locale?.language || "en", { maximumFractionDigits: 1, minimumFractionDigits: 1 })}</span>` : ""}
+        ${cop !== null || copDay !== null ? `<span class="chip click" data-entity="${this._id("cop") || ""}" style="--c:${copColor}">COP ${this._n(cop)}${copDay !== null ? ` · ${t.today} ${this._n(copDay)}` : ""}</span>` : ""}
       </div></div>`;
   }
 
@@ -269,8 +287,9 @@ const STYLE = `
   .icon { flex: none; width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
           color: var(--c); background: color-mix(in srgb, var(--c) 20%, transparent); }
   .txt { min-width: 0; }
-  .val { font-size: 1.05em; font-weight: 600; white-space: nowrap; }
-  .sub { font-size: 0.75em; font-weight: 500; color: var(--c); margin-left: 6px; }
+  .val { font-size: 1.05em; font-weight: 600; display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 6px; }
+  .val > span:first-child { white-space: nowrap; }
+  .sub { font-size: 0.75em; font-weight: 500; color: var(--c); white-space: nowrap; }
   .name { font-size: 0.8em; color: var(--secondary-text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .click { cursor: pointer; }
   .err { color: var(--error-color, #db4437); padding: 8px; }

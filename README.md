@@ -44,22 +44,25 @@ normal_level_entity: input_number.wp_niveau_normal   # optional
 
 ![open3e heat pump card](docs/card.png)
 
-Header: operating state, outside temperature, heat and electrical power, COP,
-active errors. Tiles (tap for details / to change a setpoint):
+Header: operating state, outside temperature, heat and electrical power,
+COP now and today's average (from the heat pump's energy counters; the colour
+follows today's value), active errors. Tiles (tap for details / to change a
+setpoint):
 
-| Tile | Colour |
-|---|---|
-| Heating circuit (mode) | orange = heating, grey = off |
-| Compressor (+ speed) | green = running |
-| Flow target / circuit flow | circuit flow green within ±2 K of the target, blue below, orange above |
-| Heat pump flow | orange = heating, blue = hot water, grey = idle |
-| Curve level | amber when it differs from `normal_level_entity` |
-| Hot water / DHW target | blue = charging, red = below the switch-on point, green = ok |
-| One-time charge, electric heater | blue / red when on |
+| Tile | Shows | Colour |
+|---|---|---|
+| Heating circuit | mode | orange = heating, grey = off |
+| Compressor | on/off + speed | green = running |
+| HK Vorlauf Ist/Soll | circuit flow / flow setpoint, deviation in K | green within ±2 K, blue below, orange above |
+| WP Vorlauf | heat pump flow | orange = heating, blue = hot water, grey = idle |
+| Niveau | heating curve level (tap to change) | amber when it differs from `normal_level_entity` |
+| Warmwasser Ist/Soll | tank / setpoint (tap to change the setpoint) | blue = charging, red = below the switch-on point, green = ok |
+| Einmalladung | one-time charge | blue = on |
 
-Options: `title`, `tiles` (list and order of tiles: circuit, compressor,
-flow_target, flow_hk, flow_wp, return, level, dhw, dhw_set, one_time, heater),
-`entities` (override any entity, e.g. `flow_hk: sensor.x`), `entry_id`.
+Options: `title`, `tiles` (list and order; default circuit, compressor,
+flow_hk, flow_wp, level, dhw, one_time; also available: flow_target, dhw_set,
+return, heater), `entities` (override any entity, e.g. `flow_hk: sensor.x`),
+`entry_id`.
 
 ## Bus load
 
