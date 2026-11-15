@@ -71,7 +71,7 @@
     },
     "climate": {
       "heating_circuit": {
-        "name": "Heating circuit"
+        "name": "Heating circuit flow"
       }
     }
   },

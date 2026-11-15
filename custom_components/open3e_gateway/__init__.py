@@ -9,11 +9,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import config_validation as cv, device_registry as dr, entity_registry as er
+from homeassistant.helpers.typing import ConfigType
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import GatewayError, Open3eGateway
 from .const import (
+    DOMAIN,
     CONF_LIVE_MIN_INTERVAL,
     CONF_SCAN_INTERVAL,
     DEFAULT_LIVE_MIN_INTERVAL,
@@ -25,6 +27,16 @@ from .entity import gateway_device_info
 from .model import GatewayModel, devices_from_system, fields_for_datapoint
 
 _LOGGER = logging.getLogger(__name__)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the bundled heat pump card once per HA start."""
+    from .frontend import async_register_frontend
+
+    await async_register_frontend(hass)
+    return True
 
 
 @dataclass

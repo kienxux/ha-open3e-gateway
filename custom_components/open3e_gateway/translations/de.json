@@ -71,7 +71,7 @@
     },
     "climate": {
       "heating_circuit": {
-        "name": "Heizkreis"
+        "name": "Heizkreis Vorlauf"
       }
     }
   },

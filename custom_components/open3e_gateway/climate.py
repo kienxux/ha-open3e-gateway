@@ -1,9 +1,12 @@
-"""Heating circuit 1 as a climate entity.
+"""Heating circuit 1 as a climate entity, in flow temperatures.
 
-Target: room setpoint "Standard" (424), writable only within the gateway
-limit. Mode and program come from 1415 and are read-only here: the heat pump's
-own schedule decides, Home Assistant only shows it. hvac_action reflects
-whether the compressor is heating the circuit right now (valve not on DHW).
+Current: flow temperature of heating circuit 1 (284). Target: the flow
+setpoint the heat pump calculates from its heating curve (987). The setpoint
+cannot be written directly; a new target shifts the heating curve level (880)
+by the difference, 1 K flow per level step (measured on a Vitocal 150-A), and
+only within the gateway's limit for the level. Mode and program (1415) are
+shown, not changed. hvac_action = heating while the compressor heats the
+circuit (4/3-way valve not on hot water).
 """
 
 from __future__ import annotations
@@ -16,7 +19,9 @@ from homeassistant.components.climate import (
     HVACAction,
     HVACMode,
 )
-from homeassistant.const import ATTR_TEMPERATURE, PRECISION_HALVES, UnitOfTemperature
+import asyncio
+
+from homeassistant.const import ATTR_TEMPERATURE, PRECISION_TENTHS, UnitOfTemperature
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -26,14 +31,16 @@ from . import logic as L
 from .coordinator import Open3eCoordinator
 from .entity import Open3eCuratedEntity, add_tracked
 
-KEY_STANDARD = "0x680_424_Standard"
+KEY_LEVEL = "0x680_880_Level"
+# The heat pump recalculates the flow setpoint within a few seconds.
+FLOW_TARGET_DELAY_S = 6
 
 
 async def async_setup_entry(
     hass: HomeAssistant, entry: Open3eConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     coordinator = entry.runtime_data.coordinator
-    if coordinator.model.has(L.ECU, L.DID_ROOM_SET):
+    if coordinator.model.has(L.ECU, L.DID_HK1_FLOW) and coordinator.model.has(L.ECU, L.DID_FLOW_TARGET):
         add_tracked(coordinator, async_add_entities, [HeatingCircuitClimate(coordinator, entry.entry_id)])
 
 
@@ -47,18 +54,20 @@ def _mode(mode_id: int | None) -> HVACMode:
 
 class HeatingCircuitClimate(Open3eCuratedEntity, ClimateEntity):
     _attr_temperature_unit = UnitOfTemperature.CELSIUS
-    _attr_precision = PRECISION_HALVES
-    _attr_target_temperature_step = 0.5
+    _attr_precision = PRECISION_TENTHS
+    _attr_target_temperature_step = 1
 
     def __init__(self, coordinator: Open3eCoordinator, entry_id: str) -> None:
         super().__init__(coordinator, entry_id, "heating_circuit", "open3e_heizkreis", "climate")
-        self._fld = self.field(KEY_STANDARD)
-        if self._fld and self._fld.writable:
+        self._lvl = self.field(KEY_LEVEL)
+        if self._lvl and self._lvl.writable:
             self._attr_supported_features = ClimateEntityFeature.TARGET_TEMPERATURE
-            self._attr_min_temp = self._fld.range_min
-            self._attr_max_temp = self._fld.range_max
         else:
             self._attr_supported_features = ClimateEntityFeature(0)
+
+    @property
+    def _level(self) -> float | None:
+        return L.num(L.get(self.data, L.DID_CURVE, "Level"))
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -82,11 +91,28 @@ class HeatingCircuitClimate(Open3eCuratedEntity, ClimateEntity):
 
     @property
     def current_temperature(self) -> float | None:
-        return None  # no room temperature sensor on the heat pump
+        return L.num(L.get(self.data, L.DID_HK1_FLOW, "Actual"))
 
     @property
     def target_temperature(self) -> float | None:
-        return L.num(L.get(self.data, L.DID_ROOM_SET, "Standard"))
+        return L.num(L.get(self.data, L.DID_FLOW_TARGET))
+
+    def _bounds(self) -> tuple[float, float] | None:
+        """Reachable flow setpoints = current setpoint shifted to the level limits."""
+        target, level = self.target_temperature, self._level
+        if target is None or level is None or not (self._lvl and self._lvl.writable):
+            return None
+        return target + self._lvl.range_min - level, target + self._lvl.range_max - level
+
+    @property
+    def min_temp(self) -> float:
+        b = self._bounds()
+        return round(b[0]) if b else 15
+
+    @property
+    def max_temp(self) -> float:
+        b = self._bounds()
+        return round(b[1]) if b else 70
 
     @property
     def available(self) -> bool:
@@ -98,13 +124,14 @@ class HeatingCircuitClimate(Open3eCuratedEntity, ClimateEntity):
         program = L.get(d, L.DID_CIRCUIT_MODE, "State")
         return {
             "program": program.get("Text") if isinstance(program, dict) else None,
-            "setpoint_comfort": L.num(L.get(d, L.DID_ROOM_SET, "Comfort")),
-            "setpoint_reduced": L.num(L.get(d, L.DID_ROOM_SET, "Reduced")),
-            "flow_temperature": L.num(L.get(d, L.DID_HK1_FLOW, "Actual")),
-            "flow_target": L.num(L.get(d, L.DID_FLOW_TARGET)),
-            "outside_temperature": L.num(L.get(d, L.DID_OUTSIDE, "Actual")),
-            "curve_level": L.num(L.get(d, L.DID_CURVE, "Level")),
+            "curve_level": self._level,
             "curve_gradient": L.num(L.get(d, L.DID_CURVE, "Gradient")),
+            "outside_temperature": L.num(L.get(d, L.DID_OUTSIDE, "Actual")),
+            "primary_flow": L.num(L.get(d, L.DID_FLOW, "Actual")),
+            "return_temperature": L.num(L.get(d, L.DID_RETURN, "Actual")),
+            "room_setpoint_standard": L.num(L.get(d, L.DID_ROOM_SET, "Standard")),
+            "room_setpoint_reduced": L.num(L.get(d, L.DID_ROOM_SET, "Reduced")),
+            "room_setpoint_comfort": L.num(L.get(d, L.DID_ROOM_SET, "Comfort")),
         }
 
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
@@ -115,12 +142,23 @@ class HeatingCircuitClimate(Open3eCuratedEntity, ClimateEntity):
         value = kwargs.get(ATTR_TEMPERATURE)
         if value is None:
             return
-        fld = self._fld
+        fld, target, level = self._lvl, self.target_temperature, self._level
         if not fld or not fld.writable:
-            raise HomeAssistantError("room setpoint has no write limit on the gateway")
-        if not fld.range_min <= value <= fld.range_max:
+            raise HomeAssistantError("the heating curve level has no write limit on the gateway")
+        if target is None or level is None:
+            raise HomeAssistantError("flow setpoint or heating curve level not known yet")
+        new_level = int(round(level + (value - target)))
+        if not fld.range_min <= new_level <= fld.range_max:
             raise HomeAssistantError(
-                f"{value} °C outside the gateway limit {fld.range_min:g}..{fld.range_max:g} °C"
+                f"{value} °C would need heating curve level {new_level}, outside the gateway "
+                f"limit {fld.range_min:g}..{fld.range_max:g}"
             )
-        await self.write(L.ECU, L.DID_ROOM_SET, {"Standard": round(value * 2) / 2},
-                         force=fld.needs_force, what="room setpoint")
+        if new_level == int(level):
+            return
+        await self.write(L.ECU, L.DID_CURVE, {"Level": new_level}, force=fld.needs_force,
+                         what="heating curve level")
+        self.hass.async_create_task(self._read_flow_target_later())
+
+    async def _read_flow_target_later(self) -> None:
+        await asyncio.sleep(FLOW_TARGET_DELAY_S)
+        await self.coordinator.async_read_back(L.ECU, L.DID_FLOW_TARGET)

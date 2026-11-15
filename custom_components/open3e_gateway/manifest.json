@@ -1,12 +1,19 @@
 {
   "domain": "open3e_gateway",
   "name": "open3e Gateway (ESP32)",
-  "codeowners": ["@kienxux"],
+  "codeowners": [
+    "@kienxux"
+  ],
   "config_flow": true,
+  "dependencies": [
+    "frontend",
+    "http",
+    "websocket_api"
+  ],
   "documentation": "https://github.com/kienxux/ha-open3e-gateway",
   "integration_type": "hub",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/kienxux/ha-open3e-gateway/issues",
   "requirements": [],
-  "version": "0.2.0"
+  "version": "0.3.0"
 }
