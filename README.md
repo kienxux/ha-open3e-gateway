@@ -35,7 +35,8 @@ uses the gateway's local HTTP API. MQTT is not needed.
 ## Heat pump card
 
 The integration brings its own dashboard card; no extra resource is needed.
-Add it via *Add card* (search for "open3e") or in YAML:
+Add it via *Add card* (search for "open3e"); all options can be set in the
+visual editor. In YAML:
 
 ```yaml
 type: custom:open3e-heatpump-card
@@ -46,12 +47,18 @@ normal_level_entity: input_number.wp_niveau_normal   # optional
 
 Header: operating state, outside temperature, heat and electrical power,
 COP now and today's average (from the heat pump's energy counters; the colour
-follows today's value), active errors. Tiles (tap for details / to change a
-setpoint):
+follows today's value), active errors.
+
+Below the header a timeline shows the operating state over the last 24 h
+(standby green, heating orange, hot water blue, electric heater red; hover for
+the times, tap for the history). It reads the recorder history, so it needs the
+`recorder` (on by default) and fills up from the time the integration was
+installed.
+
+Tiles (tap for details / to change a setpoint):
 
 | Tile | Shows | Colour |
 |---|---|---|
-| Heating circuit | mode | orange = heating, grey = off |
 | Compressor | on/off + speed | green = running |
 | HK Vorlauf Ist/Soll | circuit flow / flow setpoint, deviation in K | green within ±2 K, blue below, orange above |
 | WP Vorlauf | heat pump flow | orange = heating, blue = hot water, grey = idle |
@@ -59,8 +66,9 @@ setpoint):
 | Warmwasser Ist/Soll | tank / setpoint (tap to change the setpoint) | blue = charging, red = below the switch-on point, green = ok |
 | Einmalladung | one-time charge | blue = on |
 
-Options: `title`, `tiles` (list and order; default circuit, compressor,
-flow_hk, flow_wp, level, dhw, one_time; also available: flow_target, dhw_set,
+Options: `title`, `timeline` (default `true`), `hours_to_show` (default 24),
+`tiles` (list and order; default compressor, flow_hk, flow_wp, level, dhw,
+one_time; also available: circuit (heating circuit mode), flow_target, dhw_set,
 return, heater), `entities` (override any entity, e.g. `flow_hk: sensor.x`),
 `entry_id`.
 

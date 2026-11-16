@@ -3,14 +3,17 @@
  *
  *   type: custom:open3e-heatpump-card
  *   title: Wärmepumpe                       # optional
- *   tiles: [circuit, compressor, ...]       # optional: which tiles, in which order
+ *   timeline: true                          # optional: operating state bar (default on)
+ *   hours_to_show: 24                       # optional: time span of the bar
+ *   tiles: [compressor, flow_hk, ...]       # optional: which tiles, in which order
  *   normal_level_entity: input_number.x     # optional: marks a raised heating curve
  *   entities: { flow_hk: sensor.my_flow }   # optional: override any entity
  *
  * Entities are found through the integration (websocket open3e_gateway/entities),
- * so renamed entities keep working. No external libraries.
+ * so renamed entities keep working. No external libraries. The card has a visual
+ * editor (ha-form).
  */
-const VERSION = "0.3.2";
+const VERSION = "0.4.0";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
@@ -42,14 +45,17 @@ const KEYS = {
 
 // flow_hk and dhw show actual / target in one tile; flow_target, dhw_set,
 // return and heater can still be added through `tiles`.
-const DEFAULT_TILES = ["circuit", "compressor", "flow_hk", "flow_wp", "level", "dhw", "one_time"];
+// The circuit tile was replaced by the operating state timeline; it can still be added.
+const DEFAULT_TILES = ["compressor", "flow_hk", "flow_wp", "level", "dhw", "one_time"];
+const DEFAULT_HOURS = 24;
+const HISTORY_REFRESH_MS = 5 * 60 * 1000;
 
 const TEXT = {
   de: {
     title: "Wärmepumpe", circuit: "Heizkreis", compressor: "Verdichter", flow_target: "Vorlauf-Soll",
     flow_hk: "HK Vorlauf Ist/Soll", flow_wp: "WP Vorlauf", return: "Rücklauf", level: "Niveau", dhw: "Warmwasser Ist/Soll", today: "Ø heute",
     dhw_set: "WW-Soll", one_time: "Einmalladung", heater: "Heizstab", outside: "Außen", errors: "Fehler",
-    power: "Leistung", on: "An", off: "Aus", missing: "Integration open3e Gateway nicht gefunden",
+    power: "Leistung", on: "An", off: "Aus", missing: "Integration open3e Gateway nicht gefunden", now: "jetzt",
     modes: { Off: "Aus", Heating: "Heizen", Automatic: "Automatik", Cooling: "Kühlen",
              "Parallel Operation: Heating HotWater": "Heizen + WW", "Parallel Operation: Heating Cooling": "Heizen/Kühlen",
              TestMode: "Test" },
@@ -58,7 +64,7 @@ const TEXT = {
     title: "Heat pump", circuit: "Heating circuit", compressor: "Compressor", flow_target: "Flow target",
     flow_hk: "Circuit flow act/target", flow_wp: "Heat pump flow", return: "Return", level: "Curve level", dhw: "Hot water act/target", today: "today",
     dhw_set: "DHW target", one_time: "One-time charge", heater: "Heater", outside: "Outside", errors: "errors",
-    power: "Power", on: "On", off: "Off", missing: "open3e Gateway integration not found", modes: {},
+    power: "Power", on: "On", off: "Off", missing: "open3e Gateway integration not found", now: "now", modes: {},
   },
 };
 
@@ -79,12 +85,24 @@ const C = {
   info: "var(--primary-color, #03a9f4)",
 };
 
+// Operating state -> colour, shared by the header chip and the timeline.
+const STATE_COLOR = { heating: C.heat, dhw: C.water, heater: C.bad, standby: C.ok, off: C.off };
+
 class Open3eHeatpumpCard extends HTMLElement {
   static getStubConfig() { return {}; }
+
+  static async getConfigElement() {
+    await ensureHaForm();
+    return document.createElement("open3e-heatpump-card-editor");
+  }
 
   setConfig(config) {
     this._config = { ...(config || {}) };
     if (this._config.tiles && !Array.isArray(this._config.tiles)) throw new Error("tiles must be a list");
+    const h = this._config.hours_to_show;
+    if (h !== undefined && !(Number(h) > 0)) throw new Error("hours_to_show must be a positive number");
+    this._hist = null;
+    this._histKey = null;
     this._sig = null;
     if (this._hass) this._render();
   }
@@ -93,6 +111,102 @@ class Open3eHeatpumpCard extends HTMLElement {
     this._hass = hass;
     if (!this._map && !this._loading) this._load();
     this._render();
+  }
+
+  connectedCallback() {
+    // Redraw once a minute so the bar moves on, and reload the history now and then.
+    this._timer = setInterval(() => {
+      if (this._histAt && Date.now() - this._histAt > HISTORY_REFRESH_MS) this._histKey = null;
+      this._render();
+    }, 60 * 1000);
+    if (this._hass) this._render();
+  }
+
+  disconnectedCallback() { clearInterval(this._timer); }
+
+  _hours() { return Number(this._config.hours_to_show) > 0 ? Number(this._config.hours_to_show) : DEFAULT_HOURS; }
+
+  _showTimeline() { return this._config.timeline !== false; }
+
+  // Loads the state history of the operating state sensor (needs the recorder).
+  async _loadHistory(id) {
+    const key = `${id}|${this._hours()}`;
+    if (this._histKey === key || this._histLoading) return;
+    this._histLoading = true;
+    this._histKey = key;
+    const start = new Date(Date.now() - this._hours() * 3600 * 1000);
+    try {
+      const res = await this._hass.callWS({
+        type: "history/history_during_period", start_time: start.toISOString(), entity_ids: [id],
+        minimal_response: true, no_attributes: true, significant_changes_only: false,
+      });
+      this._hist = (res[id] || []).map((e) => ({ s: e.s, t: 1000 * (e.lc ?? e.lu) }));
+    } catch (e) {
+      this._hist = [];
+    }
+    this._histAt = Date.now();
+    this._histLoading = false;
+    this._sig = null;
+    this._render();
+  }
+
+  // Segments [{s, from, to}] over the shown period, merged, with the live state at the end.
+  _segments(id) {
+    const now = Date.now();
+    const start = now - this._hours() * 3600 * 1000;
+    const pts = [...(this._hist || [])];
+    const cur = this._hass.states[id];
+    if (cur) {
+      const t = new Date(cur.last_changed).getTime();
+      if (!pts.length || pts[pts.length - 1].s !== cur.state) pts.push({ s: cur.state, t: Math.max(t, pts.length ? pts[pts.length - 1].t : t) });
+    }
+    const segs = [];
+    pts.forEach((p, i) => {
+      const from = Math.max(p.t, start);
+      const to = i + 1 < pts.length ? Math.min(pts[i + 1].t, now) : now;
+      if (to <= from) return;
+      const last = segs[segs.length - 1];
+      if (last && last.s === p.s) last.to = to;
+      else segs.push({ s: p.s, from, to });
+    });
+    return { segs, start, now };
+  }
+
+  _timeline() {
+    const id = this._id("state");
+    if (!id || !this._showTimeline()) return "";
+    this._loadHistory(id);
+    const { segs, start, now } = this._segments(id);
+    const span = now - start;
+    const lang = this._hass.locale?.language || "en";
+    const time = (ms) => new Date(ms).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
+    const dur = (ms) => {
+      const m = Math.round(ms / 60000);
+      return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")} min`;
+    };
+    const stateObj = this._hass.states[id];
+    const label = (s) => ["unavailable", "unknown"].includes(s) ? "–"
+      : stateObj && this._hass.formatEntityState ? this._hass.formatEntityState(stateObj, s) : s;
+    const bars = segs.map((g) => {
+      const left = ((g.from - start) / span) * 100, width = ((g.to - g.from) / span) * 100;
+      const color = STATE_COLOR[g.s] || C.off;
+      const text = label(g.s);
+      return `<div class="seg" style="left:${left}%;width:${width}%;--c:${color}"
+        title="${text}: ${time(g.from)}–${time(g.to)} (${dur(g.to - g.from)})">${width >= 7 ? `<span>${text}</span>` : ""}</div>`;
+    }).join("");
+    // Axis: full hours, at most about five labels.
+    const hours = this._hours();
+    const step = [1, 2, 3, 4, 6, 12, 24, 48].find((x) => hours / x <= 5) || Math.ceil(hours / 5);
+    const ticks = [];
+    const first = new Date(start); first.setMinutes(0, 0, 0); first.setHours(first.getHours() + 1);
+    for (let t = first.getTime(); t < now; t += 3600 * 1000) {
+      const d = new Date(t);
+      const pos = ((t - start) / span) * 100;
+      if (d.getHours() % step === 0 && pos > 4 && pos < 92) ticks.push(`<span style="left:${pos}%">${time(t)}</span>`);
+    }
+    return `<div class="timeline click" data-entity="${id}">
+      <div class="bar">${bars}</div>
+      <div class="axis">${ticks.join("")}<span class="end">${this._t().now}</span></div></div>`;
   }
 
   getCardSize() { return 4; }
@@ -220,7 +334,7 @@ class Open3eHeatpumpCard extends HTMLElement {
     const t = this._t();
     const st = this._st("state");
     const key = st?.state;
-    const color = { heating: C.heat, dhw: C.water, heater: C.bad, standby: C.ok, off: C.off }[key] || C.off;
+    const color = STATE_COLOR[key] || C.off;
     const chip = st ? `<span class="chip" style="--c:${color}">${this._fmt("state")}</span>` : "";
     const cop = this._num("cop");
     // Daily COP from the heat pump's own energy counters (heating + hot water).
@@ -252,14 +366,15 @@ class Open3eHeatpumpCard extends HTMLElement {
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const tiles = this._config.tiles || DEFAULT_TILES;
     const ids = [...new Set([...Object.keys(KEYS).map((k) => this._id(k)), this._config.normal_level_entity])].filter(Boolean);
-    const sig = (this._error || "") + this._hass.language + ids.map((i) => {
+    const sig = (this._error || "") + this._hass.language + (this._hist ? this._hist.length : "-")
+      + Math.floor(Date.now() / 60000) + ids.map((i) => {
       const s = this._hass.states[i]; return s ? s.state + s.last_updated : "-";
     }).join("|");
     if (sig === this._sig) return;
     this._sig = sig;
     const body = this._error
       ? `<div class="err">${this._t().missing}</div>`
-      : !this._map ? "" : `${this._header()}<div class="grid">${tiles.filter((x) => KEYS[x] || ICONS[x]).map((x) => this._tile(x)).join("")}</div>`;
+      : !this._map ? "" : `${this._header()}${this._timeline()}<div class="grid">${tiles.filter((x) => KEYS[x] || ICONS[x]).map((x) => this._tile(x)).join("")}</div>`;
     this.shadowRoot.innerHTML = `<style>${STYLE}</style><ha-card>${body}</ha-card>`;
     this.shadowRoot.querySelectorAll(".click").forEach((el) => {
       const entityId = el.dataset.entity;
@@ -293,7 +408,105 @@ const STYLE = `
   .name { font-size: 0.8em; color: var(--secondary-text-color); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .click { cursor: pointer; }
   .err { color: var(--error-color, #db4437); padding: 8px; }
+  .timeline { margin-bottom: 10px; }
+  .bar { position: relative; height: 26px; border-radius: 8px; overflow: hidden;
+         background: color-mix(in srgb, var(--disabled-color, #9e9e9e) 15%, transparent); }
+  .seg { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center;
+         background: color-mix(in srgb, var(--c) 75%, var(--card-background-color, #fff));
+         box-shadow: inset -1px 0 0 var(--card-background-color, #fff); overflow: hidden; }
+  .seg span { font-size: 0.78em; font-weight: 500; color: #fff; padding: 0 4px;
+              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .axis { position: relative; height: 14px; margin-top: 2px; font-size: 0.72em; color: var(--secondary-text-color); }
+  .axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .axis span.end { right: 0; transform: none; }
 `;
+
+// ha-form is only defined once HA has loaded it; an entities card editor pulls it in.
+async function ensureHaForm() {
+  if (customElements.get("ha-form")) return;
+  try {
+    const helpers = await window.loadCardHelpers();
+    const card = await helpers.createCardElement({ type: "entities", entities: [] });
+    await card.constructor.getConfigElement();
+  } catch (e) { /* the editor falls back to YAML if ha-form is missing */ }
+}
+
+const EDITOR_TEXT = {
+  de: {
+    title: "Titel", timeline: "Verlauf Betriebszustand anzeigen", hours_to_show: "Stunden im Verlauf",
+    tiles: "Kacheln (Reihenfolge per Ziehen)", normal_level_entity: "Normales Heizkurven-Niveau (Helfer)",
+    entities: "Entitäten überschreiben (optional)", state: "Betriebszustand",
+  },
+  en: {
+    title: "Title", timeline: "Show operating state timeline", hours_to_show: "Hours in timeline",
+    tiles: "Tiles (drag to reorder)", normal_level_entity: "Normal curve level (helper)",
+    entities: "Override entities (optional)", state: "Operating state",
+  },
+};
+
+const TILE_CHOICES = ["compressor", "flow_hk", "flow_wp", "level", "dhw", "one_time", "circuit", "flow_target", "return", "dhw_set", "heater"];
+
+class Open3eHeatpumpCardEditor extends HTMLElement {
+  setConfig(config) {
+    this._config = { ...(config || {}) };
+    this._update();
+  }
+
+  set hass(hass) {
+    this._hass = hass;
+    this._update();
+  }
+
+  _lang() { return (this._hass?.locale?.language || this._hass?.language || "en").startsWith("de") ? "de" : "en"; }
+
+  _schema() {
+    const t = TEXT[this._lang()];
+    return [
+      { name: "title", selector: { text: {} } },
+      { type: "grid", name: "", schema: [
+        { name: "timeline", selector: { boolean: {} } },
+        { name: "hours_to_show", selector: { number: { min: 1, max: 168, step: 1, mode: "box", unit_of_measurement: "h" } } },
+      ] },
+      { name: "tiles", selector: { select: { multiple: true, reorder: true,
+        options: TILE_CHOICES.map((k) => ({ value: k, label: t[k] || k })) } } },
+      { name: "normal_level_entity", selector: { entity: { domain: ["input_number", "number"] } } },
+      { type: "expandable", name: "entities", title: EDITOR_TEXT[this._lang()].entities, schema:
+        ["state", ...TILE_CHOICES, "compressor_speed", "dhw_hyst_on", "dhw_charging", "outside", "cop", "power_el", "power_th"]
+          .map((k) => ({ name: k, selector: { entity: {} } })) },
+    ];
+  }
+
+  _update() {
+    if (!this._hass || !this._config) return;
+    if (!this._form) {
+      this._form = document.createElement("ha-form");
+      this._form.computeLabel = (s) => EDITOR_TEXT[this._lang()][s.name] || TEXT[this._lang()][s.name] || s.name;
+      this._form.addEventListener("value-changed", (ev) => this._changed(ev.detail.value));
+      this.appendChild(this._form);
+    }
+    this._form.hass = this._hass;
+    this._form.schema = this._schema();
+    this._form.data = { timeline: true, hours_to_show: DEFAULT_HOURS, tiles: DEFAULT_TILES, ...this._config };
+  }
+
+  _changed(value) {
+    const cfg = { ...this._config, ...value };
+    // Keep the YAML short: drop defaults and empty values.
+    if (cfg.timeline === true) delete cfg.timeline;
+    if (Number(cfg.hours_to_show) === DEFAULT_HOURS || cfg.hours_to_show === undefined || cfg.hours_to_show === null) delete cfg.hours_to_show;
+    if (Array.isArray(cfg.tiles) && cfg.tiles.join() === DEFAULT_TILES.join()) delete cfg.tiles;
+    if (!cfg.title) delete cfg.title;
+    if (!cfg.normal_level_entity) delete cfg.normal_level_entity;
+    if (cfg.entities) {
+      const e = Object.fromEntries(Object.entries(cfg.entities).filter(([, v]) => v));
+      if (Object.keys(e).length) cfg.entities = e; else delete cfg.entities;
+    }
+    this._config = cfg;
+    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: cfg }, bubbles: true, composed: true }));
+  }
+}
+
+if (!customElements.get("open3e-heatpump-card-editor")) customElements.define("open3e-heatpump-card-editor", Open3eHeatpumpCardEditor);
 
 if (!customElements.get("open3e-heatpump-card")) {
   customElements.define("open3e-heatpump-card", Open3eHeatpumpCard);
@@ -301,7 +514,7 @@ if (!customElements.get("open3e-heatpump-card")) {
   window.customCards.push({
     type: "open3e-heatpump-card",
     name: "open3e Wärmepumpe",
-    description: "Heat pump overview: circuit, compressor, flow temperatures, curve level, hot water (open3e Gateway).",
+    description: "Heat pump overview: operating state timeline, compressor, flow temperatures, curve level, hot water (open3e Gateway).",
     preview: true,
     documentationURL: "https://github.com/kienxux/ha-open3e-gateway",
   });
