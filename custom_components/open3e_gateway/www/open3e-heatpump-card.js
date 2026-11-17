@@ -14,7 +14,7 @@
  * so renamed entities keep working. No external libraries. The card has a visual
  * editor (ha-form).
  */
-const VERSION = "0.5.0";
+const VERSION = "0.5.1";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
@@ -89,6 +89,10 @@ const C = {
   info: "var(--primary-color, #03a9f4)",
 };
 
+// Every value from states, entity ids or the card config goes through esc() before
+// it is put into markup (text or attribute).
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+
 // Operating state -> colour, shared by the header chip and the timeline.
 const STATE_COLOR = { heating: C.heat, dhw: C.water, heater: C.bad, standby: C.ok, off: C.off };
 
@@ -159,12 +163,12 @@ class Open3eHeatpumpCard extends HTMLElement {
     const tick = target !== null ? `<div class="tick" style="left:${pos(target)}%"></div>` : "";
     const dot = hk !== null ? `<div class="dot" style="left:${pos(hk)}%;--c:${hkColor}"></div>` : "";
     const item = (tile, sym, label, v, color) => v === null ? "" :
-      `<span class="li click" data-entity="${this._id(tile) || ""}"><i class="${sym}" style="--c:${color}"></i>${label} ${this._n(v)} °C</span>`;
+      `<span class="li click" data-entity="${esc(this._id(tile))}"><i class="${sym}" style="--c:${color}"></i>${esc(label)} ${this._n(v)} °C</span>`;
     return `<div class="temps">
       <div class="thead"><span>${t.temps}</span><span class="tmeta">
-        ${spread !== null ? `<span class="click" data-entity="${this._id("flow_wp") || ""}">${t.spread} ${this._n(spread)} K</span>` : ""}
+        ${spread !== null ? `<span class="click" data-entity="${esc(this._id("flow_wp"))}">${t.spread} ${this._n(spread)} K</span>` : ""}
         ${d !== null ? `<span class="chip" style="--c:${hkColor}">${t.hk} ${k(d)}</span>` : ""}</span></div>
-      <div class="track click" data-entity="${this._id("flow_hk") || ""}">${band}${tick}${dot}</div>
+      <div class="track click" data-entity="${esc(this._id("flow_hk"))}">${band}${tick}${dot}</div>
       <div class="scale">${scale.join("")}</div>
       <div class="legend">
         ${item("flow_hk", "s-dot", t.hk, hk, hkColor)}
@@ -238,7 +242,7 @@ class Open3eHeatpumpCard extends HTMLElement {
       const color = STATE_COLOR[g.s] || C.off;
       const text = label(g.s);
       return `<div class="seg" style="left:${left}%;width:${width}%;--c:${color}"
-        title="${text}: ${time(g.from)}–${time(g.to)} (${dur(g.to - g.from)})">${width >= 7 ? `<span>${text}</span>` : ""}</div>`;
+        title="${esc(text)}: ${time(g.from)}–${time(g.to)} (${dur(g.to - g.from)})">${width >= 7 ? `<span>${esc(text)}</span>` : ""}</div>`;
     }).join("");
     // Axis: full hours, at most about five labels.
     const hours = this._hours();
@@ -250,7 +254,7 @@ class Open3eHeatpumpCard extends HTMLElement {
       const pos = ((t - start) / span) * 100;
       if (d.getHours() % step === 0 && pos > 4 && pos < 92) ticks.push(`<span style="left:${pos}%">${time(t)}</span>`);
     }
-    return `<div class="timeline click" data-entity="${id}">
+    return `<div class="timeline click" data-entity="${esc(id)}">
       <div class="bar">${bars}</div>
       <div class="axis">${ticks.join("")}<span class="end">${this._t().now}</span></div></div>`;
   }
@@ -370,10 +374,10 @@ class Open3eHeatpumpCard extends HTMLElement {
     }
     // The hot water tile opens the setpoint, which is the part that can be changed.
     const id = tile === "dhw" ? this._id("dhw_set") || this._id("dhw") : this._id(tile);
-    return `<div class="tile${id ? " click" : ""}" data-entity="${id || ""}" style="--c:${color}">
+    return `<div class="tile${id ? " click" : ""}" data-entity="${esc(id)}" style="--c:${color}">
       <div class="icon"><ha-icon icon="${ICONS[tile] || "mdi:information"}"></ha-icon></div>
-      <div class="txt"><div class="val"><span>${value}</span>${sub ? `<span class="sub">${sub}</span>` : ""}</div>
-      <div class="name">${t[tile] || tile}</div></div></div>`;
+      <div class="txt"><div class="val"><span>${esc(value)}</span>${sub ? `<span class="sub">${esc(sub)}</span>` : ""}</div>
+      <div class="name">${esc(t[tile] || tile)}</div></div></div>`;
   }
 
   _header() {
@@ -381,7 +385,7 @@ class Open3eHeatpumpCard extends HTMLElement {
     const st = this._st("state");
     const key = st?.state;
     const color = STATE_COLOR[key] || C.off;
-    const chip = st ? `<span class="chip" style="--c:${color}">${this._fmt("state")}</span>` : "";
+    const chip = st ? `<span class="chip" style="--c:${color}">${esc(this._fmt("state"))}</span>` : "";
     const cop = this._num("cop");
     // Daily COP from the heat pump's own energy counters (heating + hot water).
     const el = (this._num("el_heat_today") ?? 0) + (this._num("el_dhw_today") ?? 0);
@@ -395,15 +399,15 @@ class Open3eHeatpumpCard extends HTMLElement {
     const pe = this._num("power_el"), pt = this._num("power_th");
     const kw = (w) => (w / 1000).toLocaleString(this._hass.locale?.language || "en", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
     const power = pe !== null && pt !== null && pe > 0
-      ? `<span class="meta click" data-entity="${this._id("power_th") || ""}"><ha-icon icon="mdi:fire"></ha-icon>${kw(pt)} kW</span>
-         <span class="meta click" data-entity="${this._id("power_el") || ""}"><ha-icon icon="mdi:flash"></ha-icon>${kw(pe)} kW</span>` : "";
+      ? `<span class="meta click" data-entity="${esc(this._id("power_th"))}"><ha-icon icon="mdi:fire"></ha-icon>${kw(pt)} kW</span>
+         <span class="meta click" data-entity="${esc(this._id("power_el"))}"><ha-icon icon="mdi:flash"></ha-icon>${kw(pe)} kW</span>` : "";
     return `<div class="head">
-      <div class="title">${this._config.title ?? t.title}${chip}</div>
+      <div class="title">${esc(this._config.title ?? t.title)}${chip}</div>
       <div class="metas">
-        ${errors ? `<span class="chip" style="--c:${C.bad}">${errors} ${t.errors}</span>` : ""}
-        <span class="meta click" data-entity="${this._id("outside") || ""}"><ha-icon icon="mdi:thermometer"></ha-icon>${t.outside} ${this._fmt("outside")}</span>
+        ${errors ? `<span class="chip" style="--c:${C.bad}">${esc(errors)} ${t.errors}</span>` : ""}
+        <span class="meta click" data-entity="${esc(this._id("outside"))}"><ha-icon icon="mdi:thermometer"></ha-icon>${t.outside} ${esc(this._fmt("outside"))}</span>
         ${power}
-        ${cop !== null || copDay !== null ? `<span class="chip click" data-entity="${this._id("cop") || ""}" style="--c:${copColor}">COP ${this._n(cop)}${copDay !== null ? ` · ${t.today} ${this._n(copDay)}` : ""}</span>` : ""}
+        ${cop !== null || copDay !== null ? `<span class="chip click" data-entity="${esc(this._id("cop"))}" style="--c:${copColor}">COP ${this._n(cop)}${copDay !== null ? ` · ${t.today} ${this._n(copDay)}` : ""}</span>` : ""}
       </div></div>`;
   }
 
