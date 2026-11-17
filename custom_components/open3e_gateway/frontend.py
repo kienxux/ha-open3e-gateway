@@ -9,7 +9,6 @@ datapoint field, so renamed entities keep working.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import voluptuous as vol
@@ -19,6 +18,7 @@ from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
+from homeassistant.loader import async_get_integration
 
 from .const import DOMAIN
 
@@ -31,7 +31,8 @@ async def async_register_frontend(hass: HomeAssistant) -> None:
     if hass.data.get(DATA_REGISTERED):
         return
     hass.data[DATA_REGISTERED] = True
-    version = json.loads((Path(__file__).parent / "manifest.json").read_text())["version"]
+    # Version from the loaded manifest (no file I/O in the event loop).
+    version = (await async_get_integration(hass, DOMAIN)).version
     await hass.http.async_register_static_paths(
         [StaticPathConfig(f"{URL_BASE}/open3e-heatpump-card.js", str(CARD_FILE), True)]
     )

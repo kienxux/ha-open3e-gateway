@@ -55,21 +55,27 @@ the times, tap for the history). It reads the recorder history, so it needs the
 `recorder` (on by default) and fills up from the time the integration was
 installed.
 
+The flow/return bar shows, on one temperature scale, the heat pump's return →
+flow as a band (blue to orange while heating, blue for hot water), the circuit
+flow as a dot (green within ±2 K of the target, blue below, orange above) and
+the circuit flow target as a tick. The header of the bar shows the spread
+(while the compressor runs) and the circuit flow's deviation from the target.
+
 Tiles (tap for details / to change a setpoint):
 
 | Tile | Shows | Colour |
 |---|---|---|
 | Compressor | on/off + speed | green = running |
-| HK Vorlauf Ist/Soll | circuit flow / flow setpoint, deviation in K | green within ±2 K, blue below, orange above |
-| WP Vorlauf | heat pump flow | orange = heating, blue = hot water, grey = idle |
+| HK Vorlauf Ist/Soll (optional) | circuit flow / flow setpoint, deviation in K | green within ±2 K, blue below, orange above |
+| WP Vorlauf (optional) | heat pump flow | orange = heating, blue = hot water, grey = idle |
 | Niveau | heating curve level (tap to change) | amber when it differs from `normal_level_entity` |
 | Warmwasser Ist/Soll | tank / setpoint (tap to change the setpoint) | blue = charging, red = below the switch-on point, green = ok |
 | Einmalladung | one-time charge | blue = on |
 
 Options: `title`, `timeline` (default `true`), `hours_to_show` (default 24),
-`tiles` (list and order; default compressor, flow_hk, flow_wp, level, dhw,
-one_time; also available: circuit (heating circuit mode), flow_target, dhw_set,
-return, heater), `entities` (override any entity, e.g. `flow_hk: sensor.x`),
+`temp_bar` (default `true`), `tiles` (list and order; default compressor,
+level, dhw, one_time; also available: flow_hk, flow_wp, return, flow_target,
+circuit (heating circuit mode), dhw_set, heater), `entities` (override any entity, e.g. `flow_hk: sensor.x`),
 `entry_id`.
 
 ## Bus load
