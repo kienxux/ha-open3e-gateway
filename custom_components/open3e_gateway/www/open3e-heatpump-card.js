@@ -303,10 +303,10 @@ class Open3eHeatpumpCard extends HTMLElement {
       return `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" opacity="${on ? 1 : 0.35}"/>${dots}`;
     };
     const chip = (x, y, v, color, tile) => {
-      const text = deg(v), w = Math.max(46, text.length * 8 + 14);
+      const text = deg(v), w = Math.max(50, text.length * 10 + 12);
       return `<g class="${this._id(tile) ? "click" : ""}" data-entity="${esc(this._id(tile))}">
-        <rect x="${x - w / 2}" y="${y - 11}" width="${w}" height="22" rx="11" fill="${BG}" stroke="${color}" stroke-width="1.2"/>
-        <text x="${x}" y="${y + 4.5}" text-anchor="middle" class="tv">${esc(text)}</text></g>`;
+        <rect x="${x - w / 2}" y="${y - 12}" width="${w}" height="24" rx="12" fill="${BG}" stroke="${color}" stroke-width="1.2"/>
+        <text x="${x}" y="${y + 6}" text-anchor="middle" class="tv">${esc(text)}</text></g>`;
     };
     const pump = (x, y) => `<g stroke="${LINE}" stroke-width="1.2" fill="${BG}">
       <circle cx="${x}" cy="${y}" r="8"/><polygon points="${x - 3},${y - 5} ${x - 3},${y + 5} ${x + 5},${y}" fill="none" stroke-linejoin="round"/></g>`;
@@ -316,9 +316,10 @@ class Open3eHeatpumpCard extends HTMLElement {
       const fins = Array.from({ length: 6 }, (_, i) => { const fx = x + (w / 7) * (i + 1); return `M${fx},${y + 7} V${y + h - 7}`; }).join(" ");
       return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="7" fill="${BG}" stroke="${color}" stroke-width="1.2"/><path d="${fins}" fill="none" stroke="${color}" stroke-width="1.2" stroke-linecap="round"/>`;
     };
+    const W = 520, fit = (x, text, px = 9.5) => Math.min(W - 2 - (String(text).length * px) / 2, Math.max(2 + (String(text).length * px) / 2, x));
     // Callout like in the reference picture: dot on the part, line down, label below.
     const callout = (x, y0, text) => `<g class="callout"><circle cx="${x}" cy="${y0}" r="2" fill="${LINE}"/>
-      <line x1="${x}" x2="${x}" y1="${y0}" y2="${y0 + 26}" stroke="${LINE}" stroke-width="1"/><text x="${x}" y="${y0 + 44}" text-anchor="middle">${esc(text)}</text></g>`;
+      <line x1="${x}" x2="${x}" y1="${y0}" y2="${y0 + 26}" stroke="${LINE}" stroke-width="1"/><text x="${fit(x, text)}" y="${y0 + 44}" text-anchor="middle">${esc(text)}</text></g>`;
     // Two figures in the yard; an arrow below each points up to the figure, the name under the arrow.
     const person = (n, x, labelY) => {
       const eid = this._config[`person${n}_entity`] || "", st = eid ? this._hass.states[eid] : null;
@@ -327,66 +328,66 @@ class Open3eHeatpumpCard extends HTMLElement {
       return `<g class="${eid ? "click" : ""}" data-entity="${esc(eid)}" stroke="${color}" fill="none" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="${x}" cy="262" r="5"/>
         <path d="M${x},267 V284 M${x - 8},278 L${x},271 L${x + 8},278 M${x},284 L${x - 6},296 M${x},284 L${x + 6},296"/>
-        <line x1="${x}" x2="${x}" y1="${labelY - 16}" y2="${labelY - 36}" stroke-width="1"/>
-        <polygon points="${x - 3.5},${labelY - 32} ${x + 3.5},${labelY - 32} ${x},${labelY - 39}" fill="${color}" stroke-width="1"/>
-        <text x="${x}" y="${labelY}" text-anchor="middle" class="pn" stroke="none">${esc(name)}</text></g>`;
+        <line x1="${x}" x2="${x}" y1="${labelY - 17}" y2="308" stroke-width="1"/>
+        <polygon points="${x - 3.5},308 ${x + 3.5},308 ${x},301" fill="${color}" stroke-width="1"/>
+        <text x="${fit(x, name)}" y="${labelY}" text-anchor="middle" class="pn" stroke="none">${esc(name)}</text></g>`;
     };
-    const people = this._config.show_people === false ? "" : person(1, 598, 346) + person(2, 640, 372);
+    const people = this._config.show_people === false ? "" : person(1, 444, 362) + person(2, 492, 388);
     const vals = (x, y, act, set, actTile, setTile, targetOnly = false) => `
       ${targetOnly && set !== null ? "" : `<text x="${x}" y="${y}" class="va click" data-entity="${esc(this._id(actTile))}">${esc(deg(act))}</text>`}
-      ${set !== null ? `<text x="${x}" y="${targetOnly ? y : y + 22}" class="vt click" data-entity="${esc(this._id(setTile))}">${esc(deg(set))}</text>` : ""}`;
+      ${set !== null ? `<text x="${x}" y="${targetOnly ? y : y + 26}" class="vt click" data-entity="${esc(this._id(setTile))}">${esc(deg(set))}</text>` : ""}`;
 
     // Lanes (all above ground, ground line y 296): heating return / flow, hot water flow / return.
-    const HR = 200, HF = 224, WF = 258, WR = 282, HPX = 92, SX = 254, END = 456, RX = 504;
+    const HR = 196, HF = 224, WF = 256, WR = 284, HPX = 64, SX = 196, END = 336, RX = 392;
     const hpFlowY = dhwOn ? WF : HF, hpRetY = dhwOn ? WR : HR;
     let heat;
     if (storage === "none") {
       heat = `${pipe(`${HPX},${HF} ${END},${HF} ${END},${HR}`, FLOW, heatOn)}${pipe(`${END},${HR} ${HPX},${HR}`, RET, heatOn)}`;
     } else {
-      const sx0 = SX - 24, sx1 = SX + 24;
+      const sx0 = SX - 26, sx1 = SX + 26;
       heat = `${pipe(`${HPX},${HF} ${sx0},${HF}`, FLOW, heatOn)}${pipe(`${sx1},${HF} ${END},${HF} ${END},${HR}`, FLOW, heatOn)}
         ${pipe(`${END},${HR} ${sx1},${HR}`, RET, heatOn)}${pipe(`${sx0},${HR} ${HPX},${HR}`, RET, heatOn)}`;
       heat += storage === "buffer"
         ? `<g class="${this._id("buffer") ? "click" : ""}" data-entity="${esc(this._id("buffer"))}">
-            <rect x="${sx0}" y="184" width="48" height="54" rx="14" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>
+            <rect x="${sx0}" y="180" width="52" height="60" rx="14" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>
             ${buf !== null ? `<text x="${SX}" y="216" text-anchor="middle" class="tv">${esc(deg(buf))}</text>` : ""}</g>`
-        : `<rect x="${SX - 6}" y="186" width="12" height="50" rx="5" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>`;
+        : `<rect x="${SX - 6}" y="182" width="12" height="56" rx="5" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>`;
     }
-    const petals = [0, 90, 180, 270].map((a) => `<path d="M0,0 Q-7,-10 0,-18 Q7,-10 0,0" transform="rotate(${a})"/>`).join("");
+    const petals = [0, 90, 180, 270].map((a) => `<path d="M0,0 Q-6,-8 0,-15 Q6,-8 0,0" transform="rotate(${a})"/>`).join("");
     return `<div class="schema">
-      <svg viewBox="0 0 680 376" role="img" aria-label="${esc(t.schema)}">
+      <svg viewBox="0 0 520 396" role="img" aria-label="${esc(t.schema)}">
         <g class="sc">
-          <path d="M170,296 V80 M560,80 V296 M170,80 H560 M156,80 L365,12 L574,80 M365,12 V296"/>
-          <line x1="0" x2="680" y1="296" y2="296"/>
-          <path d="M254,80 V62 Q254,56 260,56 H280 Q286,56 286,62 V80 M250,80 V68 Q250,64 254,64 M290,80 V68 Q290,64 286,64 M250,80 H290"/>
-          <path d="M302,80 H310 M306,80 V64 M301,64 L304,56 H308 L311,64 Z"/>
-          <rect x="420" y="66" width="64" height="14"/><line x1="452" y1="66" x2="452" y2="80"/>
-          <rect x="428" y="44" width="26" height="16" rx="1"/><path d="M441,60 V66 M435,66 H447"/>
-          <path d="M490,80 L492,72 H500 L502,80 M496,72 V60"/><circle cx="492" cy="60" r="3.5"/><circle cx="500" cy="62" r="3.5"/>
+          <path d="M128,296 V80 M420,80 V296 M128,80 H420 M116,80 L274,12 L432,80 M274,12 V296"/>
+          <line x1="0" x2="520" y1="296" y2="296"/>
+          <path d="M180,80 V62 Q180,56 186,56 H204 Q210,56 210,62 V80 M176,80 V68 Q176,64 180,64 M214,80 V68 Q214,64 210,64 M176,80 H214"/>
+          <path d="M224,80 H232 M228,80 V64 M223,64 L226,56 H230 L233,64 Z"/>
+          <rect x="296" y="66" width="56" height="14"/><line x1="324" y1="66" x2="324" y2="80"/>
+          <rect x="304" y="46" width="26" height="16" rx="1"/><path d="M317,62 V66 M311,66 H323"/>
+          <path d="M360,80 L362,72 H370 L372,80 M366,72 V62"/><circle cx="362" cy="62" r="3.5"/><circle cx="370" cy="64" r="3.5"/>
         </g>
         ${heat}
-        ${pipe(`${HPX},${WF} ${RX},${WF} ${RX},110 ${RX + 26},110 ${RX + 26},118`, FLOW, dhwOn)}
+        ${pipe(`${HPX},${WF} ${RX},${WF} ${RX},104 ${RX - 26},104 ${RX - 26},112`, FLOW, dhwOn)}
         ${pipe(`${RX},${WF + 8} ${RX},${WR} ${HPX},${WR}`, RET, dhwOn)}
         <g class="click" data-entity="${esc(this._id("dhw_set") || this._id("dhw"))}" fill="none" stroke="${LINE}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M${RX},192 H${RX - 18} V198" stroke="${FLOW}" stroke-width="2" opacity="${dhwOn ? 1 : 0.35}"/>
+          <path d="M${RX},190 H${RX - 18} V198" stroke="${FLOW}" stroke-width="2" opacity="${dhwOn ? 1 : 0.35}"/>
           <path d="M${RX - 36},204 H${RX - 4} Q${RX - 4},220 ${RX - 20},220 Q${RX - 36},220 ${RX - 36},204 Z M${RX - 20},220 V236" fill="${BG}"/>
-          <path d="M${RX + 16},124 Q${RX + 26},110 ${RX + 36},124 Z" fill="${BG}"/>
-          <path d="M${RX + 19},130 L${RX + 14},170 M${RX + 26},130 V172 M${RX + 33},130 L${RX + 38},170" stroke-dasharray="3 5" class="${dhwOn && !still ? "spray" : ""}"/>
+          <path d="M${RX - 36},118 Q${RX - 26},104 ${RX - 16},118 Z" fill="${BG}"/>
+          <path d="M${RX - 33},124 L${RX - 38},164 M${RX - 26},124 V166 M${RX - 19},124 L${RX - 14},164" stroke-dasharray="3 5" class="${dhwOn && !still ? "spray" : ""}"/>
         </g>
         <g class="click" data-entity="${esc(this._id("climate") || this._id("flow_hk"))}">
-          ${radiator(292, 194, 52, 38, heatOn ? C.heat : LINE)}${radiator(392, 194, 52, 38, heatOn ? C.heat : LINE)}
+          ${radiator(228, 190, 38, 40, heatOn ? C.heat : LINE)}${radiator(284, 190, 38, 40, heatOn ? C.heat : LINE)}
         </g>
-        ${pump(192, HF)}${pump(192, WF)}${valve(216, hpFlowY)}
+        ${pump(140, HF)}${pump(140, WF)}${valve(158, hpFlowY)}
         <g class="click" data-entity="${esc(this._id("compressor"))}">
-          <rect x="20" y="186" width="72" height="110" rx="6" fill="${BG}" stroke="${hpColor}" stroke-width="1.2"/>
-          <circle cx="56" cy="232" r="26" fill="none" stroke="${hpColor}" stroke-width="1.2"/>
-          <g transform="translate(56 232)" stroke="${hpColor}" stroke-width="1.2" fill="none" stroke-linejoin="round"><g class="${comp ? "spin" : ""}">${petals}</g></g>
-          <path d="M34,272 H78 M34,280 H78 M34,288 H78" stroke="${hpColor}" stroke-width="1.2" stroke-linecap="round"/>
+          <rect x="8" y="180" width="56" height="116" rx="6" fill="${BG}" stroke="${hpColor}" stroke-width="1.2"/>
+          <circle cx="36" cy="220" r="21" fill="none" stroke="${hpColor}" stroke-width="1.2"/>
+          <g transform="translate(36 220)" stroke="${hpColor}" stroke-width="1.2" fill="none" stroke-linejoin="round"><g class="${comp ? "spin" : ""}">${petals}</g></g>
+          <path d="M18,262 H54 M18,272 H54 M18,282 H54" stroke="${hpColor}" stroke-width="1.2" stroke-linecap="round"/>
         </g>
-        ${chip(130, hpFlowY, wp, FLOW, "flow_wp")}${chip(130, hpRetY, ret, RET, "return")}
-        ${vals(296, 148, hk, target, "flow_hk", "flow_target")}
-        ${vals(420, 150, tv, tset, "dhw", "dhw_set", !dhwOn)}
-        ${callout(56, 296, t.lbl_hp)}${callout(RX, 296, t.lbl_dhw)}
+        ${chip(96, hpFlowY, wp, FLOW, "flow_wp")}${chip(96, hpRetY, ret, RET, "return")}
+        ${vals(146, 146, hk, target, "flow_hk", "flow_target")}
+        ${vals(282, 146, tv, tset, "dhw", "dhw_set", !dhwOn)}
+        ${callout(36, 296, t.lbl_hp)}${callout(RX, 296, t.lbl_dhw)}
         ${people}
       </svg></div>`;
   }
@@ -719,12 +720,12 @@ const STYLE = `
             border: 1px solid color-mix(in srgb, var(--disabled-color, #9e9e9e) 25%, transparent); }
   .schema svg { display: block; width: 100%; height: auto; overflow: visible; }
   .schema .sc { fill: none; stroke: #3d6ea8; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
-  .schema .callout text { font-size: 17px; fill: var(--primary-text-color); }
+  .schema .callout text { font-size: 18px; fill: var(--primary-text-color); }
   .schema text { fill: var(--primary-text-color); font-family: inherit; }
-  .schema .tv { font-size: 16px; font-weight: 600; }
-  .schema .pn { font-size: 17px; font-weight: 500; }
-  .schema .va { font-size: 24px; font-weight: 600; fill: var(--primary-text-color); }
-  .schema .vt { font-size: 20px; font-weight: 600; fill: ${C.target}; }
+  .schema .tv { font-size: 17px; font-weight: 600; }
+  .schema .pn { font-size: 18px; font-weight: 500; }
+  .schema .va { font-size: 27px; font-weight: 600; fill: var(--primary-text-color); }
+  .schema .vt { font-size: 23px; font-weight: 600; fill: ${C.target}; }
   .schema foreignObject ha-icon { display: block; }
   .schema .spin { animation: o3e-spin 1.4s linear infinite; }
   .schema .spray { animation: o3e-spray 0.6s linear infinite; }
