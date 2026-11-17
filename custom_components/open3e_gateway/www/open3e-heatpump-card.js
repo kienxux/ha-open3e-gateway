@@ -21,7 +21,7 @@
  * so renamed entities keep working. No external libraries. The card has a visual
  * editor (ha-form).
  */
-const VERSION = "0.7.0";
+const VERSION = "0.8.0";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
