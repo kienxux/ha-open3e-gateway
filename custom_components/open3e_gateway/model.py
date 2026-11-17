@@ -249,6 +249,8 @@ class GatewayModel:
     points: list[dict[str, Any]]
     fields: list[Field]
     devices: dict[int, DeviceInfoData] = field(default_factory=dict)
+    # False when a datapoint was skipped; its entities must then be kept.
+    complete: bool = True
 
     def field_by_key(self, key: str) -> Field | None:
         for f in self.fields:

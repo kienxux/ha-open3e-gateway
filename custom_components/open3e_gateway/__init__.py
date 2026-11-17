@@ -49,20 +49,32 @@ type Open3eConfigEntry = ConfigEntry[RuntimeData]
 
 
 async def build_model(api: Open3eGateway) -> GatewayModel:
-    """Read selection and codec metadata once; entities are built from it."""
+    """Read selection and codec metadata once; entities are built from it.
+
+    A transient failure (gateway unreachable, timeout, server error) is raised,
+    so setup is retried with a complete model. A datapoint the gateway
+    definitely rejects is skipped, and the model is marked incomplete so its
+    registry entries are kept.
+    """
     system = await api.system()
     points = [p for p in await api.points() if p.get("enabled", True)]
     fields = []
+    complete = True
     for point in points:
         try:
             meta = await api.datapoint(int(point["ecu"]), int(point["did"]), point.get("len"))
         except GatewayError as err:
+            if err.transient:
+                raise
             _LOGGER.warning(
                 "no metadata for 0x%03x.%s, skipping: %s", point["ecu"], point["did"], err
             )
+            complete = False
             continue
         fields.extend(fields_for_datapoint(point, meta))
-    return GatewayModel(points=points, fields=fields, devices=devices_from_system(system))
+    return GatewayModel(
+        points=points, fields=fields, devices=devices_from_system(system), complete=complete
+    )
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: Open3eConfigEntry) -> bool:
@@ -103,8 +115,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: Open3eConfigEntry) -> bo
 def _remove_stale_entities(hass: HomeAssistant, entry: Open3eConfigEntry) -> None:
     """Datapoints removed from the gateway selection leave registry entries
     behind; drop the ones no platform created in this setup."""
-    created = entry.runtime_data.coordinator.created_unique_ids
-    if not created:
+    coordinator = entry.runtime_data.coordinator
+    created = coordinator.created_unique_ids
+    if not created or not coordinator.model.complete:
+        # After a skipped datapoint the registry entries are kept: removing
+        # them would lose the user's names and areas.
         return
     reg = er.async_get(hass)
     for ent in er.async_entries_for_config_entry(reg, entry.entry_id):

@@ -37,7 +37,7 @@ async def async_setup_entry(
 
 
 class DhwWaterHeater(Open3eCuratedEntity, WaterHeaterEntity):
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_precision = PRECISION_WHOLE
     _attr_target_temperature_step = 1
     _attr_operation_list = [STATE_HEAT_PUMP, STATE_HIGH_DEMAND]
@@ -56,14 +56,14 @@ class DhwWaterHeater(Open3eCuratedEntity, WaterHeaterEntity):
 
     @property
     def available(self) -> bool:
-        return super().available and self.current_temperature is not None
+        return super().available and self.native_current_temperature is not None
 
     @property
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         return L.num(L.get(self.data, L.DID_DHW_TEMP, "Actual"))
 
     @property
-    def target_temperature(self) -> float | None:
+    def native_target_temperature(self) -> float | None:
         return L.num(L.get(self.data, L.DID_DHW_SET))
 
     @property

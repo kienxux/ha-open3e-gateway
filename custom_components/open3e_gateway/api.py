@@ -17,7 +17,16 @@ READ_TIMEOUT = aiohttp.ClientTimeout(total=20)
 
 
 class GatewayError(Exception):
-    """The gateway answered with an error or could not be reached."""
+    """The gateway answered with an error or could not be reached.
+
+    `transient` is True when the gateway could not be reached or answered
+    with a server error (worth retrying); False when it gave a definite
+    answer (HTTP 4xx, invalid JSON).
+    """
+
+    def __init__(self, message: str, *, transient: bool = False) -> None:
+        super().__init__(message)
+        self.transient = transient
 
 
 class GatewayWriteError(GatewayError):
@@ -67,10 +76,15 @@ class Open3eGateway:
                         ) from err
                     if resp.status >= 400:
                         msg = body.get("error") if isinstance(body, dict) else None
-                        raise GatewayError(f"{path}: {msg or f'HTTP {resp.status}'}")
+                        raise GatewayError(
+                            f"{path}: {msg or f'HTTP {resp.status}'}",
+                            transient=resp.status >= 500,
+                        )
                     return body
             except (aiohttp.ClientError, asyncio.TimeoutError) as err:
-                raise GatewayError(f"{path}: {err or type(err).__name__}") from err
+                raise GatewayError(
+                    f"{path}: {err or type(err).__name__}", transient=True
+                ) from err
 
     # --- metadata -----------------------------------------------------------
 

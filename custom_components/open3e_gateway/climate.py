@@ -46,7 +46,7 @@ def _mode(mode_id: int | None) -> HVACMode:
 
 
 class HeatingCircuitClimate(Open3eCuratedEntity, ClimateEntity):
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
+    _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_precision = PRECISION_TENTHS
     # Read-only: the flow setpoint follows the heating curve; change the curve
     # level (number entity) instead.
@@ -76,12 +76,12 @@ class HeatingCircuitClimate(Open3eCuratedEntity, ClimateEntity):
         return HVACAction.IDLE
 
     @property
-    def current_temperature(self) -> float | None:
+    def native_current_temperature(self) -> float | None:
         return L.num(L.get(self.data, L.DID_HK1_FLOW, "Actual"))
 
     @property
     def available(self) -> bool:
-        return super().available and self.current_temperature is not None
+        return super().available and self.native_current_temperature is not None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
