@@ -55,11 +55,29 @@ the times, tap for the history). It reads the recorder history, so it needs the
 `recorder` (on by default) and fills up from the time the integration was
 installed.
 
-The flow/return bar shows, on one temperature scale, the heat pump's return →
-flow as a band (blue to orange while heating, blue for hot water), the circuit
-flow as a dot (green within ±2 K of the target, blue below, orange above) and
-the circuit flow target as a tick. The header of the bar shows the spread
-(while the compressor runs) and the circuit flow's deviation from the target.
+The system diagram shows the heat pump with its two loops. To the right is the
+heating loop through the hydraulic separator into the house: heat pump flow and
+return, the house circuit flow, the flow target and the deviation from it.
+Below is the hot water loop into the tank: tank temperature and target, status
+(ready / charging / too cold), the temperature where charging starts
+(target − switch-on hysteresis) and the one-time charge. The 3-way valve sends
+the heat pump's water either to the house or to the tank; the heat pump's
+flow/return values are shown on the active loop, with the spread Δ while the
+compressor runs. Flow pipes are orange (top), return pipes blue (bottom), and
+moving dashes show where water flows. Most systems have no return sensor in the
+house circuit (DID 285); then that pipe shows "no sensor".
+
+The heating curve chart shows the flow target over the outside temperature
+(+20 … −30 °C, like the ViCare app), the current point and the calculation in
+three steps: base (room target + level), the slope term
+`slope × (room − outside) × (1.4347 + 0.021·d + 0.0002479·d²)` with
+d = outside − room target, and the result next to the controller's own flow
+target (987). The formula reproduces the ViCare app's curve and the
+controller's target; it is limited to the circuit's min/max flow (1192) when
+that datapoint is selected on the gateway. Add DID 1192 (MixerOneCircuitFlowTemperatureMinimumMaximumLimit) to the
+gateway selection without a range: the limits are then shown read-only and the
+curve runs flat at the maximum, like in the ViCare app. − / + change the level (and the
+slope, if it is writable) as a draft; *Save* writes it.
 
 Tiles (tap for details / to change a setpoint):
 
@@ -68,13 +86,13 @@ Tiles (tap for details / to change a setpoint):
 | Compressor | on/off + speed | green = running |
 | HK Vorlauf Ist/Soll (optional) | circuit flow / flow setpoint, deviation in K | green within ±2 K, blue below, orange above |
 | WP Vorlauf (optional) | heat pump flow | orange = heating, blue = hot water, grey = idle |
-| Niveau | heating curve level (tap to change) | amber when it differs from `normal_level_entity` |
+| Niveau · Neigung | heating curve level and slope (tap to change the level) | amber when it differs from `normal_level_entity` |
 | Warmwasser Ist/Soll | tank / setpoint (tap to change the setpoint) | blue = charging, red = below the switch-on point, green = ok |
 | Einmalladung | one-time charge | blue = on |
 
 Options: `title`, `timeline` (default `true`), `hours_to_show` (default 24),
-`temp_bar` (default `true`), `tiles` (list and order; default compressor,
-level, dhw, one_time; also available: flow_hk, flow_wp, return, flow_target,
+`temp_bar` (system diagram, default `true`), `curve` (heating curve, default `true`), `tiles` (list and order; default level,
+one_time; also available: compressor, dhw, flow_hk, flow_wp, return, flow_target,
 circuit (heating circuit mode), dhw_set, heater), `entities` (override any entity, e.g. `flow_hk: sensor.x`),
 `entry_id`.
 

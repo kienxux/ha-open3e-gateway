@@ -11,7 +11,7 @@ what we know about it (codec kind, unit, enum list, writable range).
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 NUMERIC_CODECS = {
@@ -28,6 +28,7 @@ SKIP_CODECS = {"RawCodec", "O3EDateTime", "O3ESdate", "O3EStime", "O3EUtc", "O3E
 
 # Statistics fields that are rarely wanted; created disabled.
 SECONDARY_FIELDS = {"Minimum", "Maximum", "Average", "SensorStatus", "ErrorState"}
+STAT_FIELDS = {"Minimum", "Maximum", "Average"}
 
 UNIT_FIXES = {"l/h": "L/h"}
 
@@ -47,6 +48,9 @@ class Field:
     range_min: float | None = None
     range_max: float | None = None
     is_list_count: bool = False
+    # True when the datapoint has an "Actual" field: then Minimum/Maximum/Average
+    # are sensor statistics. Without it (e.g. 1192 flow limits) they are the values.
+    has_actual: bool = True
 
     @property
     def key(self) -> str:
@@ -82,7 +86,12 @@ class Field:
 
     @property
     def secondary(self) -> bool:
-        return bool(self.path) and self.path[-1] in SECONDARY_FIELDS
+        if not self.path:
+            return False
+        last = self.path[-1]
+        if last in STAT_FIELDS:
+            return self.has_actual
+        return last in SECONDARY_FIELDS
 
     @property
     def name(self) -> str:
@@ -195,7 +204,8 @@ def fields_for_datapoint(
         )
 
     walk(meta, ())
-    return out
+    has_actual = any(f.path and f.path[-1] == "Actual" for f in out)
+    return [replace(f, has_actual=has_actual) for f in out]
 
 
 def _decimals(scale: Any) -> int | None:
