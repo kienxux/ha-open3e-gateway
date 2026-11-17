@@ -50,36 +50,35 @@ COP now and today's average (from the heat pump's energy counters; the colour
 follows today's value), active errors.
 
 Below the header a timeline shows the operating state over the last 24 h
-(standby green, heating orange, hot water blue, electric heater red; hover for
-the times, tap for the history). It reads the recorder history, so it needs the
-`recorder` (on by default) and fills up from the time the integration was
-installed.
+(standby and off grey, heating yellow, hot water orange, electric heater red;
+hover for the times, tap for the history). It reads the recorder history, so it
+needs the `recorder` (on by default) and fills up from the time the integration
+was installed.
 
-The system diagram shows the heat pump with its two loops. To the right is the
-heating loop through the hydraulic separator into the house: heat pump flow and
-return, the house circuit flow, the flow target and the deviation from it.
-Below is the hot water loop into the tank: tank temperature and target, status
-(ready / charging / too cold), the temperature where charging starts
-(target − switch-on hysteresis) and the one-time charge. The 3-way valve sends
-the heat pump's water either to the house or to the tank; the heat pump's
-flow/return values are shown on the active loop, with the spread Δ while the
-compressor runs. Flow pipes are orange (top), return pipes blue (bottom), and
-moving dashes show where water flows. Most systems have no return sensor in the
-house circuit (DID 285); then that pipe shows "no sensor".
+The system diagram has no text: the heat pump on the left, heating (radiator)
+and hot water (tank) on the right. Between heat pump and radiator a hydraulic
+separator (default), a buffer tank (`storage: buffer`) or nothing
+(`storage: none`). The heat pump is grey when the compressor is off, yellow
+while heating and orange while charging hot water. Its own flow/return
+temperatures (268/269) sit inside the heat pump box at the height of the active
+loop (greyed while the compressor is off). Only the active loop is coloured and
+animated (flow orange, return blue). Next to the radiator and the tank: actual
+temperature, and the target in purple; the tank fill turns purple once the
+target is reached. The buffer shows a temperature only if a sensor is available
+(DID 279, or `entities: {buffer: sensor.x}`). Tap a value for its history.
 
 The heating curve chart shows the flow target over the outside temperature
-(+20 … −30 °C, like the ViCare app), the current point and the calculation in
-three steps: base (room target + level), the slope term
-`slope × (room − outside) × (1.4347 + 0.021·d + 0.0002479·d²)` with
-d = outside − room target, and the result next to the controller's own flow
-target (987). The formula reproduces the ViCare app's curve and the
-controller's target; it is limited to the circuit's min/max flow (1192) when
-that datapoint is selected on the gateway. Add DID 1192 (MixerOneCircuitFlowTemperatureMinimumMaximumLimit) to the
-gateway selection without a range: the limits are then shown read-only and the
-curve runs flat at the maximum, like in the ViCare app. − / + change the level (and the
-slope, if it is writable) as a draft; *Save* writes it.
+(+20 … −30 °C, like the ViCare app) and the current point. The formula
+`room target + level − slope · d · (1.4347 + 0.021·d + 0.0002479·d²)`,
+d = outside − room target, reproduces the ViCare app's curve and the
+controller's own flow target (987). It is limited to the circuit's min/max
+flow when DID 1192 (MixerOneCircuitFlowTemperatureMinimumMaximumLimit) is in
+the gateway selection (add it without a range: read-only). With
+`curve_controls: true` a row below the chart shows the slope and the level;
+− / + change the level (and the slope, if it is writable) as a draft, *Save*
+writes it.
 
-Tiles (tap for details / to change a setpoint):
+Optional tiles below the card (tap for details / to change a setpoint):
 
 | Tile | Shows | Colour |
 |---|---|---|
@@ -91,8 +90,9 @@ Tiles (tap for details / to change a setpoint):
 | Einmalladung | one-time charge | blue = on |
 
 Options: `title`, `timeline` (default `true`), `hours_to_show` (default 24),
-`temp_bar` (system diagram, default `true`), `curve` (heating curve, default `true`), `tiles` (list and order; default level,
-one_time; also available: compressor, dhw, flow_hk, flow_wp, return, flow_target,
+`temp_bar` (system diagram, default `true`), `storage` (`separator` | `buffer` | `none`), `curve` (heating curve, default `true`),
+`curve_controls` (slope / level row below the curve, default `false`), `tiles` (list and order; default none;
+available: level, one_time, compressor, dhw, flow_hk, flow_wp, return, flow_target,
 circuit (heating circuit mode), dhw_set, heater), `entities` (override any entity, e.g. `flow_hk: sensor.x`),
 `entry_id`.
 
