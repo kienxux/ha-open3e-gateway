@@ -9,8 +9,8 @@
  *   storage: separator                      # optional: separator | buffer | none between heat pump and heating
  *   show_people: true                       # optional: two figures next to the house, with name and arrow
  *   person1_name: Anna                      # optional: label of figure 1 (default "Person 1")
- *   person1_entity: person.anna             # optional: figure turns green while home, grey when away
- *   person2_name / person2_entity           # same for figure 2
+ *   person1_tracker: device_tracker.anna    # optional: figure in the house while home (green), in the yard while away (grey)
+ *   person2_name / person2_tracker          # same for figure 2
  *   curve: true                             # optional: heating curve chart (default on)
  *   curve_controls: false                   # optional: slope / curve level row below the curve
  *   tiles: [compressor, flow_hk, ...]       # optional: which tiles, in which order (default none)
@@ -21,7 +21,7 @@
  * so renamed entities keep working. No external libraries. The card has a visual
  * editor (ha-form).
  */
-const VERSION = "0.8.0";
+const VERSION = "0.8.1";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
@@ -264,8 +264,8 @@ class Open3eHeatpumpCard extends HTMLElement {
 
   // System diagram in the style of a house cross-section (line art). The air source heat pump stands
   // outside (fan spins while the compressor runs); inside: circulation pumps, 3-way valve,
-  // hydraulic separator / buffer tank and radiators; the hot water line rises to the bathroom (tap over the sink, shower). Two people in the yard.
-  // Only the active loop is animated (dots travel along the pipes: flow red, return blue); idle
+  // hydraulic separator / buffer tank and radiators; the hot water tank stands outside; a circulation pump keeps hot water running from it to the bathroom (tap over the sink, shower) all the time. Two people in the yard.
+  // Only the active loop and the hot water circulation (always on) are animated (dots travel along the pipes: flow red, return blue); idle
   // pipes stay coloured but fainter. Values without words: actual in the text colour, target in
   // purple. The heat pump's own flow/return (268/269) sit on the pipes next to the unit at the
   // active loop's height. The hot water values show only the target while no hot water is being made.
@@ -316,29 +316,39 @@ class Open3eHeatpumpCard extends HTMLElement {
       const fins = Array.from({ length: 6 }, (_, i) => { const fx = x + (w / 7) * (i + 1); return `M${fx},${y + 7} V${y + h - 7}`; }).join(" ");
       return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="7" fill="${BG}" stroke="${color}" stroke-width="1.2"/><path d="${fins}" fill="none" stroke="${color}" stroke-width="1.2" stroke-linecap="round"/>`;
     };
-    const W = 520, fit = (x, text, px = 9.5) => Math.min(W - 2 - (String(text).length * px) / 2, Math.max(2 + (String(text).length * px) / 2, x));
+    const W = 570, fit = (x, text, px = 9.5) => Math.min(W - 2 - (String(text).length * px) / 2, Math.max(2 + (String(text).length * px) / 2, x));
     // Callout like in the reference picture: dot on the part, line down, label below.
     const callout = (x, y0, text) => `<g class="callout"><circle cx="${x}" cy="${y0}" r="2" fill="${LINE}"/>
       <line x1="${x}" x2="${x}" y1="${y0}" y2="${y0 + 26}" stroke="${LINE}" stroke-width="1"/><text x="${fit(x, text)}" y="${y0 + 44}" text-anchor="middle">${esc(text)}</text></g>`;
-    // Two figures in the yard; an arrow below each points up to the figure, the name under the arrow.
-    const person = (n, x, labelY) => {
-      const eid = this._config[`person${n}_entity`] || "", st = eid ? this._hass.states[eid] : null;
+    // Two figures with a name and an arrow pointing at them. With a device tracker (`personN_tracker`)
+    // a figure stands in the living room under the roof while its tracker is `home` and in the yard
+    // otherwise; without a tracker it stays in the yard.
+    const person = (n) => {
+      const eid = this._config[`person${n}_tracker`] || this._config[`person${n}_entity`] || "";
+      const st = eid ? this._hass.states[eid] : null;
+      const home = st?.state === "home";
       const name = String(this._config[`person${n}_name`] || st?.attributes?.friendly_name || `${t.person} ${n}`).slice(0, 12);
-      const color = st ? (st.state === "home" ? C.ok : C.off) : LINE;
+      const color = st ? (home ? C.ok : C.off) : LINE;
+      // Inside: feet on the attic floor (y 50), names just below it, left of / right of the divider.
+      const pos = home
+        ? { x: n === 1 ? 250 : 288, feet: 50, ty: 98, tx: n === 1 ? 266 : 282, anchor: n === 1 ? "end" : "start" }
+        : { x: n === 1 ? 512 : 552, feet: 296, ty: n === 1 ? 362 : 388, tx: null, anchor: "middle" };
+      const { x, feet: f } = pos, tip = f + 5;
+      const tx = pos.tx ?? fit(x, name);
       return `<g class="${eid ? "click" : ""}" data-entity="${esc(eid)}" stroke="${color}" fill="none" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="${x}" cy="262" r="5"/>
-        <path d="M${x},267 V284 M${x - 8},278 L${x},271 L${x + 8},278 M${x},284 L${x - 6},296 M${x},284 L${x + 6},296"/>
-        <line x1="${x}" x2="${x}" y1="${labelY - 17}" y2="308" stroke-width="1"/>
-        <polygon points="${x - 3.5},308 ${x + 3.5},308 ${x},301" fill="${color}" stroke-width="1"/>
-        <text x="${fit(x, name)}" y="${labelY}" text-anchor="middle" class="pn" stroke="none">${esc(name)}</text></g>`;
+        <circle cx="${x}" cy="${f - 34}" r="5"/>
+        <path d="M${x},${f - 29} V${f - 12} M${x - 8},${f - 18} L${x},${f - 25} L${x + 8},${f - 18} M${x},${f - 12} L${x - 6},${f} M${x},${f - 12} L${x + 6},${f}"/>
+        <line x1="${x}" x2="${x}" y1="${pos.ty - 17}" y2="${tip + 7}" stroke-width="1"/>
+        <polygon points="${x - 3.5},${tip + 7} ${x + 3.5},${tip + 7} ${x},${tip}" fill="${color}" stroke-width="1"/>
+        <text x="${tx}" y="${pos.ty}" text-anchor="${pos.anchor}" class="pn" stroke="none">${esc(name)}</text></g>`;
     };
-    const people = this._config.show_people === false ? "" : person(1, 444, 362) + person(2, 492, 388);
+    const people = this._config.show_people === false ? "" : person(1) + person(2);
     const vals = (x, y, act, set, actTile, setTile, targetOnly = false) => `
       ${targetOnly && set !== null ? "" : `<text x="${x}" y="${y}" class="va click" data-entity="${esc(this._id(actTile))}">${esc(deg(act))}</text>`}
       ${set !== null ? `<text x="${x}" y="${targetOnly ? y : y + 26}" class="vt click" data-entity="${esc(this._id(setTile))}">${esc(deg(set))}</text>` : ""}`;
 
     // Lanes (all above ground, ground line y 296): heating return / flow, hot water flow / return.
-    const HR = 196, HF = 224, WF = 256, WR = 284, HPX = 64, SX = 196, END = 336, RX = 392;
+    const HR = 196, HF = 224, WF = 256, WR = 284, HPX = 64, SX = 196, END = 336, RX = 392, TX = 440, CF = 236, CR = 246;
     const hpFlowY = dhwOn ? WF : HF, hpRetY = dhwOn ? WR : HR;
     let heat;
     if (storage === "none") {
@@ -353,26 +363,43 @@ class Open3eHeatpumpCard extends HTMLElement {
             ${buf !== null ? `<text x="${SX}" y="216" text-anchor="middle" class="tv">${esc(deg(buf))}</text>` : ""}</g>`
         : `<rect x="${SX - 6}" y="182" width="12" height="56" rx="5" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>`;
     }
+    // Tank fill: empty 15 K below the target, full at the target; purple once reached.
+    const fill = tv !== null && tset !== null ? Math.min(1, Math.max(0.08, (tv - (tset - 15)) / 15)) : 0;
+    const fillColor = tv !== null && tset !== null && tv >= tset ? C.target : C.water;
     const petals = [0, 90, 180, 270].map((a) => `<path d="M0,0 Q-6,-8 0,-15 Q6,-8 0,0" transform="rotate(${a})"/>`).join("");
     return `<div class="schema">
-      <svg viewBox="0 0 520 396" role="img" aria-label="${esc(t.schema)}">
+      <svg viewBox="0 -24 570 420" role="img" aria-label="${esc(t.schema)}">
+        <defs><clipPath id="o3e-tank"><rect x="${TX}" y="196" width="44" height="100" rx="16"/></clipPath></defs>
         <g class="sc">
-          <path d="M128,296 V80 M420,80 V296 M128,80 H420 M116,80 L274,12 L432,80 M274,12 V296"/>
-          <line x1="0" x2="520" y1="296" y2="296"/>
+          <path d="M128,296 V50 M420,50 V296 M128,50 H420 M116,50 L274,-18 L432,50 M274,-18 V296"/>
+          <line x1="0" x2="570" y1="296" y2="296"/>
+          <g transform="translate(0 -30)">
           <path d="M180,80 V62 Q180,56 186,56 H204 Q210,56 210,62 V80 M176,80 V68 Q176,64 180,64 M214,80 V68 Q214,64 210,64 M176,80 H214"/>
           <path d="M224,80 H232 M228,80 V64 M223,64 L226,56 H230 L233,64 Z"/>
           <rect x="296" y="66" width="56" height="14"/><line x1="324" y1="66" x2="324" y2="80"/>
           <rect x="304" y="46" width="26" height="16" rx="1"/><path d="M317,62 V66 M311,66 H323"/>
           <path d="M360,80 L362,72 H370 L372,80 M366,72 V62"/><circle cx="362" cy="62" r="3.5"/><circle cx="370" cy="64" r="3.5"/>
+          </g>
         </g>
         ${heat}
-        ${pipe(`${HPX},${WF} ${RX},${WF} ${RX},104 ${RX - 26},104 ${RX - 26},112`, FLOW, dhwOn)}
-        ${pipe(`${RX},${WF + 8} ${RX},${WR} ${HPX},${WR}`, RET, dhwOn)}
+        ${pipe(`${HPX},${WF} ${TX},${WF}`, FLOW, dhwOn)}
+        ${pipe(`${TX},${WR} ${HPX},${WR}`, RET, dhwOn)}
+        ${pipe(`${TX},${CF} ${RX},${CF} ${RX},104 ${RX - 26},104 ${RX - 26},112`, FLOW, true)}
+        ${pipe(`${RX - 20},236 ${RX - 20},${CR} ${TX},${CR}`, RET, true)}
+        ${pump(TX - 10, CF)}
+        <g class="click" data-entity="${esc(this._id("dhw_set") || this._id("dhw"))}">
+          <rect x="${TX}" y="196" width="44" height="100" rx="16" fill="${BG}" stroke="${dhwOn ? C.dhw : LINE}" stroke-width="1.2"/>
+          ${fill > 0 ? `<rect x="${TX}" y="${196 + 100 * (1 - fill)}" width="44" height="${100 * fill}" clip-path="url(#o3e-tank)"
+            style="fill:color-mix(in srgb, ${fillColor} 22%, transparent)"/>` : ""}
+          ${dhwOn ? `<g fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="${TX},${WF} ${TX + 32},${WF} ${TX + 32},270" stroke="${FLOW}"/>
+            <polyline points="${TX + 32},270 ${TX + 12},270 ${TX + 12},${WR} ${TX},${WR}" stroke="${RET}"/></g>` : ""}
+        </g>
         <g class="click" data-entity="${esc(this._id("dhw_set") || this._id("dhw"))}" fill="none" stroke="${LINE}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M${RX},190 H${RX - 18} V198" stroke="${FLOW}" stroke-width="2" opacity="${dhwOn ? 1 : 0.35}"/>
-          <path d="M${RX - 36},204 H${RX - 4} Q${RX - 4},220 ${RX - 20},220 Q${RX - 36},220 ${RX - 36},204 Z M${RX - 20},220 V236" fill="${BG}"/>
+          <path d="M${RX},190 H${RX - 18} V198" stroke="${FLOW}" stroke-width="2"/>
+          <path d="M${RX - 36},204 H${RX - 4} Q${RX - 4},220 ${RX - 20},220 Q${RX - 36},220 ${RX - 36},204 Z M${RX - 20},220 V236"/>
           <path d="M${RX - 36},118 Q${RX - 26},104 ${RX - 16},118 Z" fill="${BG}"/>
-          <path d="M${RX - 33},124 L${RX - 38},164 M${RX - 26},124 V166 M${RX - 19},124 L${RX - 14},164" stroke-dasharray="3 5" class="${dhwOn && !still ? "spray" : ""}"/>
+          <path d="M${RX - 33},124 L${RX - 38},164 M${RX - 26},124 V166 M${RX - 19},124 L${RX - 14},164" stroke-dasharray="3 5"/>
         </g>
         <g class="click" data-entity="${esc(this._id("climate") || this._id("flow_hk"))}">
           ${radiator(228, 190, 38, 40, heatOn ? C.heat : LINE)}${radiator(284, 190, 38, 40, heatOn ? C.heat : LINE)}
@@ -386,8 +413,8 @@ class Open3eHeatpumpCard extends HTMLElement {
         </g>
         ${chip(96, hpFlowY, wp, FLOW, "flow_wp")}${chip(96, hpRetY, ret, RET, "return")}
         ${vals(146, 146, hk, target, "flow_hk", "flow_target")}
-        ${vals(282, 146, tv, tset, "dhw", "dhw_set", !dhwOn)}
-        ${callout(36, 296, t.lbl_hp)}${callout(RX, 296, t.lbl_dhw)}
+        ${vals(TX - 4, 150, tv, tset, "dhw", "dhw_set", !dhwOn)}
+        ${callout(36, 296, t.lbl_hp)}${callout(TX + 22, 296, t.lbl_dhw)}
         ${people}
       </svg></div>`;
   }
@@ -636,7 +663,9 @@ class Open3eHeatpumpCard extends HTMLElement {
     if (!this._hass || !this._config) return;
     if (!this.shadowRoot) this.attachShadow({ mode: "open" });
     const tiles = this._config.tiles || DEFAULT_TILES;
-    const ids = [...new Set([...Object.keys(KEYS).map((k) => this._id(k)), this._config.normal_level_entity])].filter(Boolean);
+    const c = this._config;
+    const ids = [...new Set([...Object.keys(KEYS).map((k) => this._id(k)), c.normal_level_entity,
+      c.person1_tracker || c.person1_entity, c.person2_tracker || c.person2_entity])].filter(Boolean);
     const sig = (this._error || "") + JSON.stringify(this._draft || null) + (this._curveError || "") + this._hass.language + (this._hist ? this._hist.length : "-")
       + Math.floor(Date.now() / 60000) + ids.map((i) => {
       const s = this._hass.states[i]; return s ? s.state + s.last_updated : "-";
@@ -720,18 +749,16 @@ const STYLE = `
             border: 1px solid color-mix(in srgb, var(--disabled-color, #9e9e9e) 25%, transparent); }
   .schema svg { display: block; width: 100%; height: auto; overflow: visible; }
   .schema .sc { fill: none; stroke: #3d6ea8; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
-  .schema .callout text { font-size: 18px; fill: var(--primary-text-color); }
+  .schema .callout text { font-size: 19px; fill: var(--primary-text-color); }
   .schema text { fill: var(--primary-text-color); font-family: inherit; }
-  .schema .tv { font-size: 17px; font-weight: 600; }
-  .schema .pn { font-size: 18px; font-weight: 500; }
-  .schema .va { font-size: 27px; font-weight: 600; fill: var(--primary-text-color); }
-  .schema .vt { font-size: 23px; font-weight: 600; fill: ${C.target}; }
+  .schema .tv { font-size: 18px; font-weight: 600; }
+  .schema .pn { font-size: 19px; font-weight: 500; }
+  .schema .va { font-size: 28px; font-weight: 600; fill: var(--primary-text-color); }
+  .schema .vt { font-size: 24px; font-weight: 600; fill: ${C.target}; }
   .schema foreignObject ha-icon { display: block; }
   .schema .spin { animation: o3e-spin 1.4s linear infinite; }
-  .schema .spray { animation: o3e-spray 0.6s linear infinite; }
-  @keyframes o3e-spray { to { stroke-dashoffset: -8; } }
   @keyframes o3e-spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .schema .spin, .schema .spray { animation: none; } }
+  @media (prefers-reduced-motion: reduce) { .schema .spin { animation: none; } }
 `;
 
 // ha-form is only defined once HA has loaded it; an entities card editor pulls it in.
@@ -746,13 +773,13 @@ async function ensureHaForm() {
 
 const EDITOR_TEXT = {
   de: {
-    show_people: "Personen am Haus anzeigen", people: "Personen", person1_name: "Name Person 1", person1_entity: "Person 1 (Entität, optional)", person2_name: "Name Person 2", person2_entity: "Person 2 (Entität, optional)",
+    show_people: "Personen am Haus anzeigen", people: "Personen", person1_name: "Name Person 1", person1_tracker: "Tracker Person 1 (optional)", person2_name: "Name Person 2", person2_tracker: "Tracker Person 2 (optional)",
     title: "Titel", temp_bar: "Anlagenschema (Vor-/Rücklauf) anzeigen", storage: "Zwischen Wärmepumpe und Heizung", separator: "Hydraulische Weiche", buffer: "Pufferspeicher", none: "Nichts (direkt)", curve: "Heizkurve anzeigen", curve_controls: "Neigung und Niveau unter der Heizkurve", timeline: "Verlauf Betriebszustand anzeigen", hours_to_show: "Stunden im Verlauf",
     tiles: "Kacheln (Reihenfolge per Ziehen)", normal_level_entity: "Normales Heizkurven-Niveau (Helfer)",
     entities: "Entitäten überschreiben (optional)", state: "Betriebszustand",
   },
   en: {
-    show_people: "Show people at the house", people: "People", person1_name: "Name of person 1", person1_entity: "Person 1 (entity, optional)", person2_name: "Name of person 2", person2_entity: "Person 2 (entity, optional)",
+    show_people: "Show people at the house", people: "People", person1_name: "Name of person 1", person1_tracker: "Person 1 tracker (optional)", person2_name: "Name of person 2", person2_tracker: "Person 2 tracker (optional)",
     title: "Title", temp_bar: "Show system diagram (flow/return)", storage: "Between heat pump and heating", separator: "Hydraulic separator", buffer: "Buffer tank", none: "Nothing (direct)", curve: "Show heating curve", curve_controls: "Slope and curve level below the curve", timeline: "Show operating state timeline", hours_to_show: "Hours in timeline",
     tiles: "Tiles (drag to reorder)", normal_level_entity: "Normal curve level (helper)",
     entities: "Override entities (optional)", state: "Operating state",
@@ -791,9 +818,9 @@ class Open3eHeatpumpCardEditor extends HTMLElement {
       { type: "expandable", name: "", title: EDITOR_TEXT[this._lang()].people, schema: [
         { type: "grid", name: "", schema: [
           { name: "person1_name", selector: { text: {} } },
-          { name: "person1_entity", selector: { entity: { domain: "person" } } },
+          { name: "person1_tracker", selector: { entity: { domain: "device_tracker" } } },
           { name: "person2_name", selector: { text: {} } },
-          { name: "person2_entity", selector: { entity: { domain: "person" } } },
+          { name: "person2_tracker", selector: { entity: { domain: "device_tracker" } } },
         ] },
       ] },
       { type: "grid", name: "", schema: [
@@ -829,7 +856,7 @@ class Open3eHeatpumpCardEditor extends HTMLElement {
     if (cfg.temp_bar === true) delete cfg.temp_bar;
     if (cfg.curve === true) delete cfg.curve;
     if (cfg.show_people === true) delete cfg.show_people;
-    for (const k of ["person1_name", "person1_entity", "person2_name", "person2_entity"]) if (!cfg[k]) delete cfg[k];
+    for (const k of ["person1_name", "person1_tracker", "person2_name", "person2_tracker", "person1_entity", "person2_entity"]) if (!cfg[k]) delete cfg[k];
     if (Number(cfg.hours_to_show) === DEFAULT_HOURS || cfg.hours_to_show === undefined || cfg.hours_to_show === null) delete cfg.hours_to_show;
     if (Array.isArray(cfg.tiles) && cfg.tiles.join() === DEFAULT_TILES.join()) delete cfg.tiles;
     if (!cfg.title) delete cfg.title;
