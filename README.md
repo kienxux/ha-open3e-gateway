@@ -49,38 +49,37 @@ Header: operating state, outside temperature, heat and electrical power,
 COP now and today's average (from the heat pump's energy counters; the colour
 follows today's value), active errors.
 
-Below the header a timeline shows the operating state over the last 24 h
-(standby and off grey, heating yellow, hot water orange, electric heater red;
-hover for the times, tap for the history). It reads the recorder history, so it
-needs the `recorder` (on by default) and fills up from the time the integration
-was installed.
+Below the header a thin bar shows the operating state over the last 24 h
+(standby and off grey, heating red, hot water orange, electric heater dark
+red; no text in the bar, hover for the times, tap for the history). It reads
+the recorder history, so it needs the `recorder` (on by default) and fills up
+from the time the integration was installed.
 
-The system diagram is a line-art cross-section of the house. The air-source
-heat pump stands outside on the left; its fan spins while the compressor runs,
-and its outline is yellow while heating and orange while making hot water.
-Its own flow/return temperatures (268/269) sit on the pipes next to the unit,
-at the height of the active loop. Inside: circulation pumps, a 3-way valve on
-the active loop, a hydraulic separator (default), a buffer tank
-(`storage: buffer`) or nothing (`storage: none`) and two radiators. The hot
-water tank stands outside next to the house; the heat pump charges it, and a
-circulation pump keeps hot water running from the tank to the bathroom (tap
-over the sink, shower) and back all the time. The tank fill shows the actual
-temperature against the target (empty 15 K below, purple once reached).
-Pipes are thin with rounded corners; small dots travel along the active loop
-and the hot water circulation (flow red, return blue), idle pipes stay
-coloured but faint. Outlines are never greyed
-out. Next to the radiators and above the tank: actual temperature, and the
-target in purple; while no hot water is being made only the hot water target
-is shown. The buffer shows a temperature only if a sensor is available
-(DID 279, or `entities: {buffer: sensor.x}`). Tap a value for its history.
-With *reduce motion* switched on in the OS/browser nothing moves.
+The system diagram is a line-art cross-section of the house. Outside on the
+left stand the hot water tank and the air-source heat pump; the fan spins
+while the compressor runs, and the outline is grey when off, red while heating
+and orange while making hot water. The hot water loop runs from the heat pump
+to the tank on its left, the heating loop to the house on its right: a
+hydraulic separator (default), a buffer tank (`storage: buffer`) or nothing
+(`storage: none`), then two radiators. The heat pump's own flow/return
+temperatures (268/269) sit on the pipes of the active loop next to the unit.
+Hot water goes from the tank to the bathroom (shower, tap over the sink); it
+does not come back. The tank fill shows the actual temperature against the
+target (empty 15 K below, purple once reached). Pipes are thin with rounded
+corners; small dots travel along the active loop (flow red, return blue), idle
+pipes stay coloured but faint. All temperatures use the same text size: the
+actual value in the text colour, the target in purple; while no hot water is
+being made only the hot water target is shown. The buffer shows a temperature
+only if a sensor is available (DID 279, or `entities: {buffer: sensor.x}`).
+Tap a value for its history. With *reduce motion* switched on in the
+OS/browser nothing moves.
 
 Two people are drawn with an arrow and a name (default "Person 1" /
 "Person 2"; set `person1_name` / `person2_name`). With a device tracker
 (`person1_tracker` / `person2_tracker`, a `device_tracker.*` entity) a figure
-stands in the living room under the roof while its tracker is `home` (green)
-and in the yard otherwise (grey); tap it for details. Without a tracker it
-stays in the yard. `show_people: false` hides them.
+stands in the living room while its tracker is `home` (green) and in the yard
+otherwise (grey); tap it for details. Without a tracker it stays in the yard.
+`show_people: false` hides them.
 
 The heating curve chart shows the flow target over the outside temperature
 (+20 … −30 °C, like the ViCare app) and the current point. The formula

@@ -21,7 +21,7 @@
  * so renamed entities keep working. No external libraries. The card has a visual
  * editor (ha-form).
  */
-const VERSION = "0.8.1";
+const VERSION = "0.9.0";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
@@ -108,7 +108,7 @@ const C = {
   bad: "var(--red-color, #f44336)",
   off: "var(--disabled-color, #9e9e9e)",
   info: "var(--primary-color, #03a9f4)",
-  heating: "var(--yellow-color, #ffeb3b)",
+  heating: "var(--red-color, #f44336)",
   dhw: "var(--orange-color, #ff9800)",
   target: "var(--purple-color, #926bc7)",
 };
@@ -118,10 +118,8 @@ const C = {
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 // Operating state -> colour, shared by the header chip and the timeline.
-// Standby/off grey, heating yellow, hot water orange.
-const STATE_COLOR = { heating: C.heating, dhw: C.dhw, heater: C.bad, standby: C.off, off: C.off };
-// Dark text on the light segment colours.
-const STATE_TEXT = { heating: "rgba(0, 0, 0, 0.75)" };
+// Standby/off grey, heating red, hot water orange, electric heater dark red.
+const STATE_COLOR = { heating: C.heating, dhw: C.dhw, heater: "#b71c1c", standby: C.off, off: C.off };
 
 class Open3eHeatpumpCard extends HTMLElement {
   static getStubConfig() { return {}; }
@@ -262,13 +260,15 @@ class Open3eHeatpumpCard extends HTMLElement {
     this._draft = dr; this._sig = null; this._render();
   }
 
-  // System diagram in the style of a house cross-section (line art). The air source heat pump stands
-  // outside (fan spins while the compressor runs); inside: circulation pumps, 3-way valve,
-  // hydraulic separator / buffer tank and radiators; the hot water tank stands outside; a circulation pump keeps hot water running from it to the bathroom (tap over the sink, shower) all the time. Two people in the yard.
-  // Only the active loop and the hot water circulation (always on) are animated (dots travel along the pipes: flow red, return blue); idle
-  // pipes stay coloured but fainter. Values without words: actual in the text colour, target in
-  // purple. The heat pump's own flow/return (268/269) sit on the pipes next to the unit at the
-  // active loop's height. The hot water values show only the target while no hot water is being made.
+  // System diagram in the style of a house cross-section (line art). Outside on the left: the hot
+  // water tank and the air source heat pump (fan spins while the compressor runs). The hot water
+  // loop runs from the heat pump to the tank on the left, the heating loop to the house on the right:
+  // hydraulic separator / buffer tank (or nothing) and two radiators. Hot water goes from the tank
+  // to the bathroom (shower, tap over the sink); it does not come back. Two people at the house.
+  // Only the active loop is animated (dots travel along the pipes: flow red, return blue); idle
+  // pipes stay coloured but fainter. All temperatures use one text style: actual in the text
+  // colour, target in purple. The heat pump's own flow/return (268/269) sit on the pipes next to
+  // the unit at the active loop. The hot water values show only the target while no hot water is made.
   _schematic() {
     if (this._config.temp_bar === false) return "";
     const t = this._t();
@@ -280,13 +280,13 @@ class Open3eHeatpumpCard extends HTMLElement {
     const comp = !!this._on("compressor");
     const dhwPath = op === "dhw";
     const heatOn = comp && !dhwPath, dhwOn = comp && dhwPath;
-    const hpColor = !comp ? C.heat : dhwPath ? C.dhw : C.heating;
+    const hpColor = !comp ? C.off : dhwPath ? C.dhw : C.heating;
     const LINE = "#3d6ea8", FLOW = "#f0451f", RET = "#2a6fc0", BG = "var(--card-background-color, #fff)";
     const still = !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const deg = (v) => (v === null ? "–" : `${this._n(v)}°`);
-    // Pipe with rounded corners and small dots travelling along it (like a power-flow card):
-    // about 35 px/s, one dot every ~80 px, dots in the pipe colour.
-    const pipe = (pts, color, on) => {
+    // Pipe with rounded corners; on an active loop small dots travel along it (like a power-flow
+    // card): about 35 px/s, one dot every ~80 px, dots in the pipe colour.
+    const pipe = (pts, color, on, anim = on) => {
       const xy = pts.split(" ").map((q) => q.split(",").map(Number));
       let len = 0, d = `M${xy[0].join(",")}`;
       for (let i = 1; i < xy.length; i++) {
@@ -298,123 +298,106 @@ class Open3eHeatpumpCard extends HTMLElement {
         d += ` L${x1 - ((x1 - x0) / l1) * rr},${y1 - ((y1 - y0) / l1) * rr} Q${x1},${y1} ${x1 + ((x2 - x1) / l2) * rr},${y1 + ((y2 - y1) / l2) * rr}`;
       }
       const n = Math.max(1, Math.round(len / 80)), dur = Math.max(1.5, len / 35);
-      const dots = on && !still ? Array.from({ length: n }, (_, i) => `<circle r="3.2" fill="${color}">
+      const dots = anim && !still ? Array.from({ length: n }, (_, i) => `<circle r="3.2" fill="${color}">
         <animateMotion dur="${dur.toFixed(2)}s" begin="-${((dur / n) * i).toFixed(2)}s" repeatCount="indefinite" path="${d}"/></circle>`).join("") : "";
       return `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" opacity="${on ? 1 : 0.35}"/>${dots}`;
     };
-    const chip = (x, y, v, color, tile) => {
-      const text = deg(v), w = Math.max(50, text.length * 10 + 12);
-      return `<g class="${this._id(tile) ? "click" : ""}" data-entity="${esc(this._id(tile))}">
-        <rect x="${x - w / 2}" y="${y - 12}" width="${w}" height="24" rx="12" fill="${BG}" stroke="${color}" stroke-width="1.2"/>
-        <text x="${x}" y="${y + 6}" text-anchor="middle" class="tv">${esc(text)}</text></g>`;
-    };
-    const pump = (x, y) => `<g stroke="${LINE}" stroke-width="1.2" fill="${BG}">
-      <circle cx="${x}" cy="${y}" r="8"/><polygon points="${x - 3},${y - 5} ${x - 3},${y + 5} ${x + 5},${y}" fill="none" stroke-linejoin="round"/></g>`;
-    const valve = (x, y) => `<polygon points="${x - 7},${y - 6} ${x + 7},${y + 6} ${x + 7},${y - 6} ${x - 7},${y + 6}"
-      fill="${BG}" stroke="${LINE}" stroke-width="1.2" stroke-linejoin="round"/>`;
+    // Temperature on a pipe: plain text just above the line.
+    const onPipe = (x, y, v, tile) => `<text x="${x}" y="${y - 6}" text-anchor="middle" class="tv${this._id(tile) ? " click" : ""}"
+      data-entity="${esc(this._id(tile))}">${esc(deg(v))}</text>`;
     const radiator = (x, y, w, h, color) => {
       const fins = Array.from({ length: 6 }, (_, i) => { const fx = x + (w / 7) * (i + 1); return `M${fx},${y + 7} V${y + h - 7}`; }).join(" ");
       return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="7" fill="${BG}" stroke="${color}" stroke-width="1.2"/><path d="${fins}" fill="none" stroke="${color}" stroke-width="1.2" stroke-linecap="round"/>`;
     };
     const W = 570, fit = (x, text, px = 9.5) => Math.min(W - 2 - (String(text).length * px) / 2, Math.max(2 + (String(text).length * px) / 2, x));
-    // Callout like in the reference picture: dot on the part, line down, label below.
-    const callout = (x, y0, text) => `<g class="callout"><circle cx="${x}" cy="${y0}" r="2" fill="${LINE}"/>
-      <line x1="${x}" x2="${x}" y1="${y0}" y2="${y0 + 26}" stroke="${LINE}" stroke-width="1"/><text x="${fit(x, text)}" y="${y0 + 44}" text-anchor="middle">${esc(text)}</text></g>`;
-    // Two figures with a name and an arrow pointing at them. With a device tracker (`personN_tracker`)
-    // a figure stands in the living room under the roof while its tracker is `home` and in the yard
-    // otherwise; without a tracker it stays in the yard.
+    // Callout: dot on the part, line down, label below.
+    const callout = (x, y0, text, len = 26) => `<g class="callout"><circle cx="${x}" cy="${y0}" r="2" fill="${LINE}"/>
+      <line x1="${x}" x2="${x}" y1="${y0}" y2="${y0 + len}" stroke="${LINE}" stroke-width="1"/><text x="${fit(x, text)}" y="${y0 + len + 18}" text-anchor="middle">${esc(text)}</text></g>`;
+    // Two figures standing on the ground with a name below and an arrow pointing at them. With a
+    // device tracker (`personN_tracker`) a figure stands in the living room while its tracker is
+    // `home` and in the yard otherwise; without a tracker it stays in the yard.
     const person = (n) => {
       const eid = this._config[`person${n}_tracker`] || this._config[`person${n}_entity`] || "";
       const st = eid ? this._hass.states[eid] : null;
       const home = st?.state === "home";
       const name = String(this._config[`person${n}_name`] || st?.attributes?.friendly_name || `${t.person} ${n}`).slice(0, 12);
       const color = st ? (home ? C.ok : C.off) : LINE;
-      // Inside: feet on the attic floor (y 50), names just below it, left of / right of the divider.
-      const pos = home
-        ? { x: n === 1 ? 250 : 288, feet: 50, ty: 98, tx: n === 1 ? 266 : 282, anchor: n === 1 ? "end" : "start" }
-        : { x: n === 1 ? 512 : 552, feet: 296, ty: n === 1 ? 362 : 388, tx: null, anchor: "middle" };
-      const { x, feet: f } = pos, tip = f + 5;
-      const tx = pos.tx ?? fit(x, name);
+      const x = home ? (n === 1 ? 484 : 506) : (n === 1 ? 540 : 562), f = 296, tip = f + 5, ty = n === 1 ? 362 : 388;
       return `<g class="${eid ? "click" : ""}" data-entity="${esc(eid)}" stroke="${color}" fill="none" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="${x}" cy="${f - 34}" r="5"/>
         <path d="M${x},${f - 29} V${f - 12} M${x - 8},${f - 18} L${x},${f - 25} L${x + 8},${f - 18} M${x},${f - 12} L${x - 6},${f} M${x},${f - 12} L${x + 6},${f}"/>
-        <line x1="${x}" x2="${x}" y1="${pos.ty - 17}" y2="${tip + 7}" stroke-width="1"/>
+        <line x1="${x}" x2="${x}" y1="${ty - 17}" y2="${tip + 7}" stroke-width="1"/>
         <polygon points="${x - 3.5},${tip + 7} ${x + 3.5},${tip + 7} ${x},${tip}" fill="${color}" stroke-width="1"/>
-        <text x="${tx}" y="${pos.ty}" text-anchor="${pos.anchor}" class="pn" stroke="none">${esc(name)}</text></g>`;
+        <text x="${fit(x, name)}" y="${ty}" text-anchor="middle" class="pn" stroke="none">${esc(name)}</text></g>`;
     };
     const people = this._config.show_people === false ? "" : person(1) + person(2);
     const vals = (x, y, act, set, actTile, setTile, targetOnly = false) => `
-      ${targetOnly && set !== null ? "" : `<text x="${x}" y="${y}" class="va click" data-entity="${esc(this._id(actTile))}">${esc(deg(act))}</text>`}
-      ${set !== null ? `<text x="${x}" y="${targetOnly ? y : y + 26}" class="vt click" data-entity="${esc(this._id(setTile))}">${esc(deg(set))}</text>` : ""}`;
+      ${targetOnly && set !== null ? "" : `<text x="${x}" y="${y}" class="tv click" data-entity="${esc(this._id(actTile))}">${esc(deg(act))}</text>`}
+      ${set !== null ? `<text x="${x}" y="${targetOnly ? y : y + 24}" class="tv tgt click" data-entity="${esc(this._id(setTile))}">${esc(deg(set))}</text>` : ""}`;
 
-    // Lanes (all above ground, ground line y 296): heating return / flow, hot water flow / return.
-    const HR = 196, HF = 224, WF = 256, WR = 284, HPX = 64, SX = 196, END = 336, RX = 392, TX = 440, CF = 236, CR = 246;
-    const hpFlowY = dhwOn ? WF : HF, hpRetY = dhwOn ? WR : HR;
+    // Layout: tank 4–48 and heat pump 112–168 outside, house 232–520 (bathroom | living room),
+    // ground line y 296. Heating lanes right of the heat pump, hot water lanes left of it.
+    const TX = 4, HPL = 112, HPR = 168, HL = 232, HRW = 520, DV = 352, EAVE = 70, APEX = 12;
+    const HR = 196, HF = 224, WF = 232, WR = 276, SX = 268, END = 462, RX = 340, SUP = 84;
+    const ridge = (HL + HRW) / 2, roofAt = (x) => APEX + ((EAVE - APEX) * Math.abs(x - ridge)) / (ridge - HL + 12);
     let heat;
     if (storage === "none") {
-      heat = `${pipe(`${HPX},${HF} ${END},${HF} ${END},${HR}`, FLOW, heatOn)}${pipe(`${END},${HR} ${HPX},${HR}`, RET, heatOn)}`;
+      heat = `${pipe(`${HPR},${HF} ${END},${HF} ${END},${HR}`, FLOW, heatOn)}${pipe(`${END},${HR} ${HPR},${HR}`, RET, heatOn)}`;
     } else {
       const sx0 = SX - 26, sx1 = SX + 26;
-      heat = `${pipe(`${HPX},${HF} ${sx0},${HF}`, FLOW, heatOn)}${pipe(`${sx1},${HF} ${END},${HF} ${END},${HR}`, FLOW, heatOn)}
-        ${pipe(`${END},${HR} ${sx1},${HR}`, RET, heatOn)}${pipe(`${sx0},${HR} ${HPX},${HR}`, RET, heatOn)}`;
+      heat = `${pipe(`${HPR},${HF} ${sx0},${HF}`, FLOW, heatOn)}${pipe(`${sx1},${HF} ${END},${HF} ${END},${HR}`, FLOW, heatOn)}
+        ${pipe(`${END},${HR} ${sx1},${HR}`, RET, heatOn)}${pipe(`${sx0},${HR} ${HPR},${HR}`, RET, heatOn)}`;
       heat += storage === "buffer"
         ? `<g class="${this._id("buffer") ? "click" : ""}" data-entity="${esc(this._id("buffer"))}">
             <rect x="${sx0}" y="180" width="52" height="60" rx="14" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>
-            ${buf !== null ? `<text x="${SX}" y="216" text-anchor="middle" class="tv">${esc(deg(buf))}</text>` : ""}</g>`
+            ${buf !== null ? `<text x="${SX}" y="217" text-anchor="middle" class="tv">${esc(deg(buf))}</text>` : ""}</g>`
         : `<rect x="${SX - 6}" y="182" width="12" height="56" rx="5" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>`;
     }
     // Tank fill: empty 15 K below the target, full at the target; purple once reached.
     const fill = tv !== null && tset !== null ? Math.min(1, Math.max(0.08, (tv - (tset - 15)) / 15)) : 0;
     const fillColor = tv !== null && tset !== null && tv >= tset ? C.target : C.water;
     const petals = [0, 90, 180, 270].map((a) => `<path d="M0,0 Q-6,-8 0,-15 Q6,-8 0,0" transform="rotate(${a})"/>`).join("");
+    const dhwId = esc(this._id("dhw_set") || this._id("dhw"));
     return `<div class="schema">
-      <svg viewBox="0 -24 570 420" role="img" aria-label="${esc(t.schema)}">
+      <svg viewBox="0 4 570 394" role="img" aria-label="${esc(t.schema)}">
         <defs><clipPath id="o3e-tank"><rect x="${TX}" y="196" width="44" height="100" rx="16"/></clipPath></defs>
         <g class="sc">
-          <path d="M128,296 V50 M420,50 V296 M128,50 H420 M116,50 L274,-18 L432,50 M274,-18 V296"/>
+          <path d="M${HL},296 V${EAVE} M${HRW},${EAVE} V296 M${HL - 12},${EAVE} L${ridge},${APEX} L${HRW + 12},${EAVE} M${DV},${roofAt(DV)} V296"/>
           <line x1="0" x2="570" y1="296" y2="296"/>
-          <g transform="translate(0 -30)">
-          <path d="M180,80 V62 Q180,56 186,56 H204 Q210,56 210,62 V80 M176,80 V68 Q176,64 180,64 M214,80 V68 Q214,64 210,64 M176,80 H214"/>
-          <path d="M224,80 H232 M228,80 V64 M223,64 L226,56 H230 L233,64 Z"/>
-          <rect x="296" y="66" width="56" height="14"/><line x1="324" y1="66" x2="324" y2="80"/>
-          <rect x="304" y="46" width="26" height="16" rx="1"/><path d="M317,62 V66 M311,66 H323"/>
-          <path d="M360,80 L362,72 H370 L372,80 M366,72 V62"/><circle cx="362" cy="62" r="3.5"/><circle cx="370" cy="64" r="3.5"/>
-          </g>
         </g>
         ${heat}
-        ${pipe(`${HPX},${WF} ${TX},${WF}`, FLOW, dhwOn)}
-        ${pipe(`${TX},${WR} ${HPX},${WR}`, RET, dhwOn)}
-        ${pipe(`${TX},${CF} ${RX},${CF} ${RX},104 ${RX - 26},104 ${RX - 26},112`, FLOW, true)}
-        ${pipe(`${RX - 20},236 ${RX - 20},${CR} ${TX},${CR}`, RET, true)}
-        ${pump(TX - 10, CF)}
-        <g class="click" data-entity="${esc(this._id("dhw_set") || this._id("dhw"))}">
+        ${pipe(`${HPL},${WF} ${TX + 44},${WF}`, FLOW, dhwOn)}
+        ${pipe(`${TX + 44},${WR} ${HPL},${WR}`, RET, dhwOn)}
+        ${pipe(`${TX + 22},196 ${TX + 22},${SUP} ${RX},${SUP} ${RX},${SUP + 66} ${RX - 18},${SUP + 66} ${RX - 18},${SUP + 72}`, FLOW, true, false)}
+        ${pipe(`${RX - 26},${SUP} ${RX - 26},${SUP + 8}`, FLOW, true, false)}
+        <g class="click" data-entity="${dhwId}">
           <rect x="${TX}" y="196" width="44" height="100" rx="16" fill="${BG}" stroke="${dhwOn ? C.dhw : LINE}" stroke-width="1.2"/>
           ${fill > 0 ? `<rect x="${TX}" y="${196 + 100 * (1 - fill)}" width="44" height="${100 * fill}" clip-path="url(#o3e-tank)"
             style="fill:color-mix(in srgb, ${fillColor} 22%, transparent)"/>` : ""}
           ${dhwOn ? `<g fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="${TX},${WF} ${TX + 32},${WF} ${TX + 32},270" stroke="${FLOW}"/>
-            <polyline points="${TX + 32},270 ${TX + 12},270 ${TX + 12},${WR} ${TX},${WR}" stroke="${RET}"/></g>` : ""}
+            <polyline points="${TX + 44},${WF} ${TX + 14},${WF} ${TX + 14},262" stroke="${FLOW}"/>
+            <polyline points="${TX + 14},262 ${TX + 30},262 ${TX + 30},${WR} ${TX + 44},${WR}" stroke="${RET}"/></g>` : ""}
         </g>
-        <g class="click" data-entity="${esc(this._id("dhw_set") || this._id("dhw"))}" fill="none" stroke="${LINE}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M${RX},190 H${RX - 18} V198" stroke="${FLOW}" stroke-width="2"/>
-          <path d="M${RX - 36},204 H${RX - 4} Q${RX - 4},220 ${RX - 20},220 Q${RX - 36},220 ${RX - 36},204 Z M${RX - 20},220 V236"/>
-          <path d="M${RX - 36},118 Q${RX - 26},104 ${RX - 16},118 Z" fill="${BG}"/>
-          <path d="M${RX - 33},124 L${RX - 38},164 M${RX - 26},124 V166 M${RX - 19},124 L${RX - 14},164" stroke-dasharray="3 5"/>
+        <g class="click" data-entity="${dhwId}" fill="none" stroke="${LINE}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M${RX - 36},${SUP + 78} H${RX - 4} Q${RX - 4},${SUP + 94} ${RX - 20},${SUP + 94} Q${RX - 36},${SUP + 94} ${RX - 36},${SUP + 78} Z M${RX - 20},${SUP + 94} V${SUP + 100}"/>
+          <path d="M${RX - 36},${SUP + 20} Q${RX - 26},${SUP + 6} ${RX - 16},${SUP + 20} Z" fill="${BG}"/>
+          <path d="M${RX - 33},${SUP + 26} L${RX - 38},${SUP + 56} M${RX - 26},${SUP + 26} V${SUP + 58} M${RX - 19},${SUP + 26} L${RX - 14},${SUP + 56}" stroke-dasharray="3 5"/>
         </g>
         <g class="click" data-entity="${esc(this._id("climate") || this._id("flow_hk"))}">
-          ${radiator(228, 190, 38, 40, heatOn ? C.heat : LINE)}${radiator(284, 190, 38, 40, heatOn ? C.heat : LINE)}
+          ${radiator(366, 190, 38, 40, heatOn ? C.heat : LINE)}${radiator(414, 190, 38, 40, heatOn ? C.heat : LINE)}
         </g>
-        ${pump(140, HF)}${pump(140, WF)}${valve(158, hpFlowY)}
         <g class="click" data-entity="${esc(this._id("compressor"))}">
-          <rect x="8" y="180" width="56" height="116" rx="6" fill="${BG}" stroke="${hpColor}" stroke-width="1.2"/>
-          <circle cx="36" cy="220" r="21" fill="none" stroke="${hpColor}" stroke-width="1.2"/>
-          <g transform="translate(36 220)" stroke="${hpColor}" stroke-width="1.2" fill="none" stroke-linejoin="round"><g class="${comp ? "spin" : ""}">${petals}</g></g>
-          <path d="M18,262 H54 M18,272 H54 M18,282 H54" stroke="${hpColor}" stroke-width="1.2" stroke-linecap="round"/>
+          <rect x="${HPL}" y="180" width="56" height="116" rx="6" fill="${BG}" stroke="${hpColor}" stroke-width="1.2"/>
+          <circle cx="${HPL + 28}" cy="220" r="21" fill="none" stroke="${hpColor}" stroke-width="1.2"/>
+          <g transform="translate(${HPL + 28} 220)" stroke="${hpColor}" stroke-width="1.2" fill="none" stroke-linejoin="round"><g class="${comp ? "spin" : ""}">${petals}</g></g>
+          <path d="M${HPL + 10},262 H${HPL + 46} M${HPL + 10},272 H${HPL + 46} M${HPL + 10},282 H${HPL + 46}" stroke="${hpColor}" stroke-width="1.2" stroke-linecap="round"/>
         </g>
-        ${chip(96, hpFlowY, wp, FLOW, "flow_wp")}${chip(96, hpRetY, ret, RET, "return")}
-        ${vals(146, 146, hk, target, "flow_hk", "flow_target")}
-        ${vals(TX - 4, 150, tv, tset, "dhw", "dhw_set", !dhwOn)}
-        ${callout(36, 296, t.lbl_hp)}${callout(TX + 22, 296, t.lbl_dhw)}
+        ${dhwOn
+          ? `${onPipe((TX + 44 + HPL) / 2, WF, wp, "flow_wp")}${onPipe((TX + 44 + HPL) / 2, WR, ret, "return")}`
+          : `${onPipe((HPR + HL) / 2, HF, wp, "flow_wp")}${onPipe((HPR + HL) / 2, HR, ret, "return")}`}
+        ${vals(366, 120, hk, target, "flow_hk", "flow_target")}
+        ${vals(56, 160, tv, tset, "dhw", "dhw_set", !dhwOn)}
+        ${callout(HPL + 28, 296, t.lbl_hp)}${callout(TX + 22, 296, t.lbl_dhw, 52)}
         ${people}
       </svg></div>`;
   }
@@ -482,8 +465,8 @@ class Open3eHeatpumpCard extends HTMLElement {
       const left = ((g.from - start) / span) * 100, width = ((g.to - g.from) / span) * 100;
       const color = STATE_COLOR[g.s] || C.off;
       const text = label(g.s);
-      return `<div class="seg" style="left:${left}%;width:${width}%;--c:${color};--tc:${STATE_TEXT[g.s] || "#fff"}"
-        title="${esc(text)}: ${time(g.from)}–${time(g.to)} (${dur(g.to - g.from)})">${width >= 7 ? `<span>${esc(text)}</span>` : ""}</div>`;
+      return `<div class="seg" style="left:${left}%;width:${width}%;--c:${color}"
+        title="${esc(text)}: ${time(g.from)}–${time(g.to)} (${dur(g.to - g.from)})"></div>`;
     }).join("");
     // Axis: full hours, at most about five labels.
     const hours = this._hours();
@@ -712,13 +695,9 @@ const STYLE = `
   .click { cursor: pointer; }
   .err { color: var(--error-color, #db4437); padding: 8px; }
   .timeline { margin-bottom: 10px; }
-  .bar { position: relative; height: 26px; border-radius: 8px; overflow: hidden;
+  .bar { position: relative; height: 8px; border-radius: 4px; overflow: hidden;
          background: color-mix(in srgb, var(--disabled-color, #9e9e9e) 15%, transparent); }
-  .seg { position: absolute; top: 0; bottom: 0; display: flex; align-items: center; justify-content: center;
-         background: color-mix(in srgb, var(--c) 85%, var(--card-background-color, #fff));
-         box-shadow: inset -1px 0 0 var(--card-background-color, #fff); overflow: hidden; }
-  .seg span { font-size: 0.78em; font-weight: 500; color: var(--tc, #fff); padding: 0 4px;
-              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .seg { position: absolute; top: 0; bottom: 0; background: var(--c); }
   .axis { position: relative; height: 14px; margin-top: 2px; font-size: 0.72em; color: var(--secondary-text-color); }
   .axis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
   .axis span.end { right: 0; transform: none; }
@@ -751,10 +730,9 @@ const STYLE = `
   .schema .sc { fill: none; stroke: #3d6ea8; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
   .schema .callout text { font-size: 19px; fill: var(--primary-text-color); }
   .schema text { fill: var(--primary-text-color); font-family: inherit; }
-  .schema .tv { font-size: 18px; font-weight: 600; }
+  .schema .tv { font-size: 20px; font-weight: 600; }
+  .schema .tgt { fill: ${C.target}; }
   .schema .pn { font-size: 19px; font-weight: 500; }
-  .schema .va { font-size: 28px; font-weight: 600; fill: var(--primary-text-color); }
-  .schema .vt { font-size: 24px; font-weight: 600; fill: ${C.target}; }
   .schema foreignObject ha-icon { display: block; }
   .schema .spin { animation: o3e-spin 1.4s linear infinite; }
   @keyframes o3e-spin { to { transform: rotate(360deg); } }
