@@ -125,6 +125,7 @@ Optional tiles below the card (tap for details / to change a setpoint):
 | Einmalladung | one-time charge | blue = on |
 
 Options: `title`, `timeline` (default `true`), `hours_to_show` (default 24),
+`header_metrics` (ordered list of `outside`, `power`, `cop`; all three by default),
 `temp_bar` (system diagram, default `true`), `storage` (`separator` | `buffer` | `none`),
 `show_people` (default `true`), `person1_name`, `person1_tracker`, `person2_name`, `person2_tracker`, `curve` (heating curve, default `true`),
 `curve_controls` (slope / level row below the curve, default `false`), `tiles` (list and order; default none;

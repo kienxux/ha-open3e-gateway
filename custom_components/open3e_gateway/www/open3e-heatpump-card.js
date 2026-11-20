@@ -13,6 +13,7 @@
  *   person2_name / person2_tracker          # same for figure 2
  *   curve: true                             # optional: heating curve chart (default on)
  *   curve_controls: false                   # optional: slope / curve level row below the curve
+ *   header_metrics: [outside, power, cop]    # optional: header metrics and order
  *   tiles: [compressor, flow_hk, ...]       # optional: which tiles, in which order (default none)
  *   normal_level_entity: input_number.x     # optional: marks a raised heating curve
  *   entities: { flow_hk: sensor.my_flow }   # optional: override any entity
@@ -21,7 +22,7 @@
  * so renamed entities keep working. No external libraries. The card has a visual
  * editor (ha-form).
  */
-const VERSION = "0.9.1";
+const VERSION = "0.10.0";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
@@ -63,6 +64,8 @@ const KEYS = {
 // The circuit tile was replaced by the operating state timeline, the flow tiles by the
 // temperature bar; all of them can still be added.
 const DEFAULT_TILES = [];
+const DEFAULT_HEADER_METRICS = ["outside", "power", "cop"];
+const HEADER_METRICS = ["outside", "power", "cop"];
 const DEFAULT_HOURS = 24;
 const HISTORY_REFRESH_MS = 5 * 60 * 1000;
 
@@ -76,7 +79,7 @@ const TEXT = {
     save: "Speichern", cancel: "Abbrechen",
     level_slope: "Niveau · Neigung",
     dhw_set: "WW-Soll", one_time: "Einmalladung", heater: "Heizstab", outside: "Außen", errors: "Fehler",
-    power: "Leistung", on: "An", off: "Aus", missing: "Integration open3e Gateway nicht gefunden", now: "jetzt",
+    power: "Leistung", thermal: "Thermisch", electrical: "Elektrisch", efficiency: "Effizienz", on: "An", off: "Aus", missing: "Integration open3e Gateway nicht gefunden", now: "jetzt",
     modes: { Off: "Aus", Heating: "Heizen", Automatic: "Automatik", Cooling: "Kühlen",
              "Parallel Operation: Heating HotWater": "Heizen + WW", "Parallel Operation: Heating Cooling": "Heizen/Kühlen",
              TestMode: "Test" },
@@ -90,7 +93,7 @@ const TEXT = {
     save: "Save", cancel: "Cancel",
     level_slope: "Curve level · slope",
     dhw_set: "DHW target", one_time: "One-time charge", heater: "Heater", outside: "Outside", errors: "errors",
-    power: "Power", on: "On", off: "Off", missing: "open3e Gateway integration not found", now: "now", modes: {},
+    power: "Power", thermal: "Thermal", electrical: "Electrical", efficiency: "Efficiency", on: "On", off: "Off", missing: "open3e Gateway integration not found", now: "now", modes: {},
   },
 };
 const ICONS = {
@@ -132,6 +135,7 @@ class Open3eHeatpumpCard extends HTMLElement {
   setConfig(config) {
     this._config = { ...(config || {}) };
     if (this._config.tiles && !Array.isArray(this._config.tiles)) throw new Error("tiles must be a list");
+    if (this._config.header_metrics && !Array.isArray(this._config.header_metrics)) throw new Error("header_metrics must be a list");
     const h = this._config.hours_to_show;
     if (h !== undefined && !(Number(h) > 0)) throw new Error("hours_to_show must be a positive number");
     this._hist = null;
@@ -618,7 +622,7 @@ class Open3eHeatpumpCard extends HTMLElement {
     const st = this._st("state");
     const key = st?.state;
     const color = STATE_COLOR[key] || C.off;
-    const chip = st ? `<span class="chip" style="--c:${color}">${esc(this._fmt("state"))}</span>` : "";
+    const state = st ? `<span class="state" style="--c:${color}"><i></i>${esc(this._fmt("state"))}</span>` : "";
     const cop = this._num("cop");
     // Daily COP from the heat pump's own energy counters (heating + hot water).
     const el = (this._num("el_heat_today") ?? 0) + (this._num("el_dhw_today") ?? 0);
@@ -631,17 +635,18 @@ class Open3eHeatpumpCard extends HTMLElement {
     const errors = this._num("errors");
     const pe = this._num("power_el"), pt = this._num("power_th");
     const kw = (w) => (w / 1000).toLocaleString(this._hass.locale?.language || "en", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
-    const power = pe !== null && pt !== null && pe > 0
-      ? `<span class="meta click" data-entity="${esc(this._id("power_th"))}"><ha-icon icon="mdi:fire"></ha-icon>${kw(pt)} kW</span>
-         <span class="meta click" data-entity="${esc(this._id("power_el"))}"><ha-icon icon="mdi:flash"></ha-icon>${kw(pe)} kW</span>` : "";
+    const metrics = (this._config.header_metrics ?? DEFAULT_HEADER_METRICS).filter((x) => HEADER_METRICS.includes(x));
+    const metric = {
+      outside: this._id("outside") ? `<div class="metric click" data-entity="${esc(this._id("outside"))}"><ha-icon icon="mdi:thermometer"></ha-icon><span><small>${esc(t.outside)}</small><b>${esc(this._fmt("outside"))}</b></span></div>` : "",
+      power: pe !== null || pt !== null ? `<div class="metric power click" data-entity="${esc(this._id("power_th") || this._id("power_el"))}"><ha-icon icon="mdi:lightning-bolt"></ha-icon><span><small>${esc(t.power)}</small><b>${pt !== null ? `${kw(pt)} kW` : "–"}<em>${pe !== null ? `${kw(pe)} kW ${esc(t.electrical.toLowerCase())}` : ""}</em></b></span></div>` : "",
+      cop: cop !== null || copDay !== null ? `<div class="metric click" data-entity="${esc(this._id("cop"))}" style="--c:${copColor}"><ha-icon icon="mdi:gauge"></ha-icon><span><small>${esc(t.efficiency)}</small><b>COP ${this._n(cop)}<em>${copDay !== null ? `${esc(t.today)} ${this._n(copDay)}` : ""}</em></b></span></div>` : "",
+    };
     return `<div class="head">
-      <div class="title">${esc(this._config.title ?? t.title)}${chip}</div>
-      <div class="metas">
-        ${errors ? `<span class="chip" style="--c:${C.bad}">${esc(errors)} ${t.errors}</span>` : ""}
-        <span class="meta click" data-entity="${esc(this._id("outside"))}"><ha-icon icon="mdi:thermometer"></ha-icon>${t.outside} ${esc(this._fmt("outside"))}</span>
-        ${power}
-        ${cop !== null || copDay !== null ? `<span class="chip click" data-entity="${esc(this._id("cop"))}" style="--c:${copColor}">COP ${this._n(cop)}${copDay !== null ? ` · ${t.today} ${this._n(copDay)}` : ""}</span>` : ""}
-      </div></div>`;
+      <div class="headline"><div class="title">${esc(this._config.title ?? t.title)}</div>${state}
+        ${errors ? `<span class="alert"><ha-icon icon="mdi:alert-circle"></ha-icon>${esc(errors)} ${esc(t.errors)}</span>` : ""}
+      </div>
+      ${metrics.length ? `<div class="metrics">${metrics.map((x) => metric[x]).join("")}</div>` : ""}
+    </div>`;
   }
 
   _render() {
@@ -675,12 +680,23 @@ class Open3eHeatpumpCard extends HTMLElement {
 }
 
 const STYLE = `
-  ha-card { padding: 12px; }
-  .head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
-  .title { font-size: 1.15em; font-weight: 500; display: flex; align-items: center; gap: 8px; }
-  .metas { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 0.9em; color: var(--secondary-text-color); }
-  .meta { display: inline-flex; align-items: center; gap: 2px; }
-  .meta ha-icon { --mdc-icon-size: 16px; }
+  ha-card { padding: 16px; overflow: hidden; }
+  .head { margin-bottom: 12px; }
+  .headline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .title { font-size: 1.22em; line-height: 1.2; font-weight: 600; margin-right: auto; }
+  .state { --c: ${C.off}; display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border-radius: 999px;
+           color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent); font-size: .82em; font-weight: 600; }
+  .state i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 16%, transparent); }
+  .alert { display: inline-flex; align-items: center; gap: 4px; color: ${C.bad}; font-size: .82em; font-weight: 600; }
+  .alert ha-icon { --mdc-icon-size: 17px; }
+  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 8px; }
+  .metric { --c: var(--primary-color); min-width: 0; display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 11px;
+            background: color-mix(in srgb, var(--primary-text-color) 4%, transparent); border: 1px solid color-mix(in srgb, var(--primary-text-color) 9%, transparent); }
+  .metric ha-icon { --mdc-icon-size: 21px; flex: none; color: var(--c); }
+  .metric span { min-width: 0; display: flex; flex-direction: column; }
+  .metric small { color: var(--secondary-text-color); font-size: .68em; line-height: 1.2; }
+  .metric b { font-size: .95em; line-height: 1.35; white-space: nowrap; }
+  .metric em { margin-left: 6px; color: var(--secondary-text-color); font-size: .72em; font-style: normal; font-weight: 400; }
   .chip { padding: 2px 10px; border-radius: 12px; font-size: 0.85em; font-weight: 500;
           color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
@@ -738,6 +754,7 @@ const STYLE = `
   .schema .spin { animation: o3e-spin 1.4s linear infinite; }
   @keyframes o3e-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .schema .spin { animation: none; } }
+  @media (max-width: 360px) { ha-card { padding: 12px; } .metrics { grid-template-columns: repeat(2, 1fr); } .metric.power { grid-column: 1 / -1; } }
 `;
 
 // ha-form is only defined once HA has loaded it; an entities card editor pulls it in.
@@ -754,13 +771,13 @@ const EDITOR_TEXT = {
   de: {
     show_people: "Personen am Haus anzeigen", people: "Personen", person1_name: "Name Person 1", person1_tracker: "Tracker Person 1 (optional)", person2_name: "Name Person 2", person2_tracker: "Tracker Person 2 (optional)",
     title: "Titel", temp_bar: "Anlagenschema (Vor-/Rücklauf) anzeigen", storage: "Zwischen Wärmepumpe und Heizung", separator: "Hydraulische Weiche", buffer: "Pufferspeicher", none: "Nichts (direkt)", curve: "Heizkurve anzeigen", curve_controls: "Neigung und Niveau unter der Heizkurve", timeline: "Verlauf Betriebszustand anzeigen", hours_to_show: "Stunden im Verlauf",
-    tiles: "Kacheln (Reihenfolge per Ziehen)", normal_level_entity: "Normales Heizkurven-Niveau (Helfer)",
+    header_metrics: "Kennzahlen im Kopf (Reihenfolge per Ziehen)", outside: "Außentemperatur", cop: "COP / Effizienz", tiles: "Kacheln (Reihenfolge per Ziehen)", normal_level_entity: "Normales Heizkurven-Niveau (Helfer)",
     entities: "Entitäten überschreiben (optional)", state: "Betriebszustand",
   },
   en: {
     show_people: "Show people at the house", people: "People", person1_name: "Name of person 1", person1_tracker: "Person 1 tracker (optional)", person2_name: "Name of person 2", person2_tracker: "Person 2 tracker (optional)",
     title: "Title", temp_bar: "Show system diagram (flow/return)", storage: "Between heat pump and heating", separator: "Hydraulic separator", buffer: "Buffer tank", none: "Nothing (direct)", curve: "Show heating curve", curve_controls: "Slope and curve level below the curve", timeline: "Show operating state timeline", hours_to_show: "Hours in timeline",
-    tiles: "Tiles (drag to reorder)", normal_level_entity: "Normal curve level (helper)",
+    header_metrics: "Header metrics (drag to reorder)", outside: "Outside temperature", cop: "COP / efficiency", tiles: "Tiles (drag to reorder)", normal_level_entity: "Normal curve level (helper)",
     entities: "Override entities (optional)", state: "Operating state",
   },
 };
@@ -784,6 +801,8 @@ class Open3eHeatpumpCardEditor extends HTMLElement {
     const t = TEXT[this._lang()];
     return [
       { name: "title", selector: { text: {} } },
+      { name: "header_metrics", selector: { select: { multiple: true, reorder: true,
+        options: HEADER_METRICS.map((k) => ({ value: k, label: EDITOR_TEXT[this._lang()][k] || t[k] || k })) } } },
       { type: "grid", name: "", schema: [
         { name: "timeline", selector: { boolean: {} } },
         { name: "hours_to_show", selector: { number: { min: 1, max: 168, step: 1, mode: "box", unit_of_measurement: "h" } } },
@@ -825,7 +844,7 @@ class Open3eHeatpumpCardEditor extends HTMLElement {
     }
     this._form.hass = this._hass;
     this._form.schema = this._schema();
-    this._form.data = { timeline: true, temp_bar: true, show_people: true, curve: true, hours_to_show: DEFAULT_HOURS, tiles: DEFAULT_TILES, ...this._config };
+    this._form.data = { timeline: true, temp_bar: true, show_people: true, curve: true, hours_to_show: DEFAULT_HOURS, header_metrics: DEFAULT_HEADER_METRICS, tiles: DEFAULT_TILES, ...this._config };
   }
 
   _changed(value) {
@@ -838,6 +857,7 @@ class Open3eHeatpumpCardEditor extends HTMLElement {
     for (const k of ["person1_name", "person1_tracker", "person2_name", "person2_tracker", "person1_entity", "person2_entity"]) if (!cfg[k]) delete cfg[k];
     if (Number(cfg.hours_to_show) === DEFAULT_HOURS || cfg.hours_to_show === undefined || cfg.hours_to_show === null) delete cfg.hours_to_show;
     if (Array.isArray(cfg.tiles) && cfg.tiles.join() === DEFAULT_TILES.join()) delete cfg.tiles;
+    if (Array.isArray(cfg.header_metrics) && cfg.header_metrics.join() === DEFAULT_HEADER_METRICS.join()) delete cfg.header_metrics;
     if (!cfg.title) delete cfg.title;
     if (!cfg.curve_controls) delete cfg.curve_controls;
     if (!cfg.storage || cfg.storage === "separator") delete cfg.storage;
