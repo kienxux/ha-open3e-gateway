@@ -1,8 +1,27 @@
-# open3e Gateway (ESP32) for Home Assistant
+# Viessmann Heat Pump (open3e Gateway, local) for Home Assistant
 
-A custom integration for Viessmann E3 heat pumps (tested with a Vitocal 150-A)
-through an [open3e-esp32](https://github.com/boonkerz/open3e-esp32) gateway. It
-uses the gateway's local HTTP API. MQTT is not needed.
+Local Home Assistant integration for **Viessmann E3 heat pumps** (Vitocal; tested
+with a Vitocal 150-A), the devices you otherwise control with the **ViCare** app.
+It talks to an [open3e-esp32](https://github.com/boonkerz/open3e-esp32) gateway
+on the heat pump's CAN bus over the gateway's local HTTP API: no ViCare cloud,
+no Viessmann account, no MQTT needed. Includes a heat pump dashboard card.
+
+Keywords: Viessmann, ViCare, Vitocal, E3, heat pump, Wärmepumpe, open3e, CAN, ESP32.
+
+## Based on
+
+- [open3e](https://github.com/open3e/open3e): the open-source project that
+  reads and writes Viessmann E3 controllers (Vitocal, Vitodens, Vitocharge VX3)
+  over CAN or DoIP. Its datapoint database, codecs and enum lists are the
+  basis of this integration.
+- [open3e-esp32](https://github.com/boonkerz/open3e-esp32): open3e as
+  standalone ESP32-S3 firmware (CAN → MQTT/HTTP, no Raspberry Pi). This
+  integration needs this gateway.
+- Optional: the fork [kienxux/open3e-esp32](https://github.com/kienxux/open3e-esp32/tree/api-values)
+  (branch `api-values`) adds `GET /api/values` (cached values, no extra bus
+  load, see [Bus load](#bus-load)).
+
+This is an independent community project, not affiliated with Viessmann.
 
 ## Features
 
@@ -35,7 +54,7 @@ uses the gateway's local HTTP API. MQTT is not needed.
 ## Heat pump card
 
 The integration brings its own dashboard card; no extra resource is needed.
-Add it via *Add card* (search for "open3e"); all options can be set in the
+Add it via *Add card* (search for "Viessmann" or "open3e"); all options can be set in the
 visual editor. In YAML:
 
 ```yaml
@@ -115,7 +134,9 @@ circuit (heating circuit mode), dhw_set, heater), `entities` (override any entit
 
 ## Bus load
 
-Gateway firmware with `GET /api/values` returns the poller's cached values, so
+Gateway firmware with `GET /api/values` (currently only in the
+[api-values branch](https://github.com/kienxux/open3e-esp32/tree/api-values)
+of the kienxux fork) returns the poller's cached values, so
 a refresh causes no CAN traffic (default every 30 s). With older firmware the
 integration reads each datapoint live, but not more often than its gateway
 interval and not more often than the "minimum interval" option (default 120 s).
@@ -123,8 +144,9 @@ The `can_state` diagnostic sensor shows which mode is active.
 
 ## Installation (HACS)
 
-HACS → Custom repositories → add this repository as type *Integration* →
-install → restart HA → Settings → Devices & services → Add → "open3e Gateway".
+The integration is in the HACS default list: HACS → search for "Viessmann" or
+"open3e" → *Viessmann Heat Pump (open3e Gateway, local)* → download → restart
+HA → Settings → Devices & services → Add integration → "Viessmann Heat Pump".
 
 Requires Home Assistant 2026.11 or newer.
 

@@ -2,8 +2,8 @@
   "config": {
     "step": {
       "user": {
-        "title": "open3e-Gateway",
-        "description": "IP-Adresse oder Hostname des open3e-esp32-Gateways.",
+        "title": "Viessmann-Wärmepumpe (open3e-Gateway)",
+        "description": "IP-Adresse oder Hostname des open3e-esp32-Gateways (lokaler CAN-Zugriff auf Viessmann-E3-Geräte, ohne ViCare-Cloud).",
         "data": {
           "host": "Host"
         }

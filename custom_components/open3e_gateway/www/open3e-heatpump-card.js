@@ -21,7 +21,7 @@
  * so renamed entities keep working. No external libraries. The card has a visual
  * editor (ha-form).
  */
-const VERSION = "0.9.0";
+const VERSION = "0.9.1";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
@@ -858,8 +858,8 @@ if (!customElements.get("open3e-heatpump-card")) {
   window.customCards = window.customCards || [];
   window.customCards.push({
     type: "open3e-heatpump-card",
-    name: "open3e Wärmepumpe",
-    description: "Heat pump overview: operating state timeline, compressor, flow temperatures, curve level, hot water (open3e Gateway).",
+    name: "Viessmann Wärmepumpe (open3e)",
+    description: "Viessmann / ViCare heat pump overview: operating state timeline, system diagram, heating curve, hot water (open3e Gateway).",
     preview: true,
     documentationURL: "https://github.com/kienxux/ha-open3e-gateway",
   });

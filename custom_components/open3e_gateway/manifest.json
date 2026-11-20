@@ -1,6 +1,6 @@
 {
   "domain": "open3e_gateway",
-  "name": "open3e Gateway (ESP32)",
+  "name": "Viessmann Heat Pump (open3e Gateway, local)",
   "codeowners": [
     "@kienxux"
   ],
@@ -15,5 +15,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/kienxux/ha-open3e-gateway/issues",
   "requirements": [],
-  "version": "0.9.0"
+  "version": "0.9.1"
 }
