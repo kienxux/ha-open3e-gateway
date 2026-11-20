@@ -95,12 +95,12 @@ only if a sensor is available (DID 279, or `entities: {buffer: sensor.x}`).
 Tap a value for its history. With *reduce motion* switched on in the
 OS/browser nothing moves.
 
-Two people are drawn with an arrow and a name (default "Person 1" /
-"Person 2"; set `person1_name` / `person2_name`). With a device tracker
-(`person1_tracker` / `person2_tracker`, a `device_tracker.*` entity) a figure
-stands inside the house while its tracker is `home` (green) and in the yard
-otherwise (grey); tap it for details. Without a tracker it stays in the yard.
-`show_people: false` hides them.
+Two named people stand in a dedicated living area inside the house (default
+"Person 1" / "Person 2"; set `person1_name` / `person2_name`). With a device
+tracker (`person1_tracker` / `person2_tracker`, a `device_tracker.*` entity),
+the figure is green while home and grey while away; tap it for details.
+`show_people: false` hides them. All diagram temperatures use the same compact,
+outlined label style; target values remain purple.
 
 The heating curve chart shows the flow target over the outside temperature
 (+20 … −30 °C, like the ViCare app) and the current point. The formula

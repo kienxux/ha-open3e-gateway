@@ -7,9 +7,9 @@
  *   hours_to_show: 24                       # optional: time span of the bar
  *   temp_bar: true                          # optional: system diagram with flow/return (default on)
  *   storage: separator                      # optional: separator | buffer | none between heat pump and heating
- *   show_people: true                       # optional: two figures next to the house, with name and arrow
+ *   show_people: true                       # optional: two named figures in the house
  *   person1_name: Anna                      # optional: label of figure 1 (default "Person 1")
- *   person1_tracker: device_tracker.anna    # optional: figure in the house while home (green), in the yard while away (grey)
+ *   person1_tracker: device_tracker.anna    # optional: green while home, grey while away
  *   person2_name / person2_tracker          # same for figure 2
  *   curve: true                             # optional: heating curve chart (default on)
  *   curve_controls: false                   # optional: slope / curve level row below the curve
@@ -22,7 +22,7 @@
  * so renamed entities keep working. No external libraries. The card has a visual
  * editor (ha-form).
  */
-const VERSION = "0.10.0";
+const VERSION = "0.10.1";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
@@ -306,46 +306,41 @@ class Open3eHeatpumpCard extends HTMLElement {
       return `<path d="${d}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" opacity="${on ? 1 : 0.35}"/>${dots}`;
     };
     // Temperature on a pipe: outlined chip in the pipe colour.
-    const chip = (x, y, v, color, tile) => {
+    const chip = (x, y, v, color, tile, targetValue = false) => {
       const text = deg(v), w = Math.max(50, text.length * 10 + 12);
       return `<g class="${this._id(tile) ? "click" : ""}" data-entity="${esc(this._id(tile))}">
         <rect x="${x - w / 2}" y="${y - 12}" width="${w}" height="24" rx="12" fill="${BG}" stroke="${color}" stroke-width="1.2"/>
-        <text x="${x}" y="${y + 6}" text-anchor="middle" class="tv">${esc(text)}</text></g>`;
+        <text x="${x}" y="${y + 5}" text-anchor="middle" class="tv${targetValue ? " tgt" : ""}">${esc(text)}</text></g>`;
     };
     const radiator = (x, y, w, h, color) => {
       const fins = Array.from({ length: 6 }, (_, i) => { const fx = x + (w / 7) * (i + 1); return `M${fx},${y + 7} V${y + h - 7}`; }).join(" ");
       return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="7" fill="${BG}" stroke="${color}" stroke-width="1.2"/><path d="${fins}" fill="none" stroke="${color}" stroke-width="1.2" stroke-linecap="round"/>`;
     };
-    const W = 610, fit = (x, text, px = 9.5) => Math.min(W - 2 - (String(text).length * px) / 2, Math.max(2 + (String(text).length * px) / 2, x));
-    // Two figures standing on the ground with a name below and an arrow pointing at them. With a
-    // device tracker (`personN_tracker`) a figure stands in the living room while its tracker is
-    // `home` and in the yard otherwise; without a tracker it stays in the yard.
+    // Both people have a dedicated living area inside the enlarged house. Their tracker changes
+    // the colour (green at home, grey away) without moving them through the diagram.
     const person = (n) => {
       const eid = this._config[`person${n}_tracker`] || this._config[`person${n}_entity`] || "";
       const st = eid ? this._hass.states[eid] : null;
       const home = st?.state === "home";
       const name = String(this._config[`person${n}_name`] || st?.attributes?.friendly_name || `${t.person} ${n}`).slice(0, 12);
       const color = st ? (home ? C.ok : C.off) : LINE;
-      // Figure 46 high (head top y 250, just below the hot water line at 244), names in two rows.
-      const x = home ? (n === 1 ? 270 : 340) : (n === 1 ? 528 : 580), f = 296, tip = f + 5, ty = n === 1 ? 336 : 364;
+      const x = n === 1 ? 390 : 445, f = 306;
       return `<g class="${eid ? "click" : ""}" data-entity="${esc(eid)}" stroke="${color}" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-        <circle cx="${x}" cy="${f - 39}" r="6.5"/>
-        <path d="M${x},${f - 32} V${f - 15} M${x - 11},${f - 22} L${x},${f - 29} L${x + 11},${f - 22} M${x},${f - 15} L${x - 8},${f} M${x},${f - 15} L${x + 8},${f}"/>
-        <line x1="${x}" x2="${x}" y1="${ty - 21}" y2="${tip + 8}" stroke-width="1.2"/>
-        <polygon points="${x - 4},${tip + 8} ${x + 4},${tip + 8} ${x},${tip}" fill="${color}" stroke-width="1"/>
-        <text x="${fit(x, name, 12)}" y="${ty}" text-anchor="middle" class="pn" stroke="none">${esc(name)}</text></g>`;
+        <circle cx="${x}" cy="${f - 51}" r="8"/>
+        <path d="M${x},${f - 42} V${f - 18} M${x - 14},${f - 31} L${x},${f - 39} L${x + 14},${f - 31} M${x},${f - 18} L${x - 10},${f} M${x},${f - 18} L${x + 10},${f}"/>
+        <text x="${x}" y="329" text-anchor="middle" class="pn" stroke="none">${esc(name)}</text></g>`;
     };
     const people = this._config.show_people === false ? "" : person(1) + person(2);
     const vals = (x, y, act, set, actTile, setTile, targetOnly = false) => `
-      ${targetOnly && set !== null ? "" : `<text x="${x}" y="${y}" class="tv click" data-entity="${esc(this._id(actTile))}">${esc(deg(act))}</text>`}
-      ${set !== null ? `<text x="${x}" y="${targetOnly ? y : y + 24}" class="tv tgt click" data-entity="${esc(this._id(setTile))}">${esc(deg(set))}</text>` : ""}`;
+      ${targetOnly && set !== null ? "" : chip(x, y, act, LINE, actTile)}
+      ${set !== null ? chip(x, targetOnly ? y : y + 29, set, C.target, setTile, true) : ""}`;
 
     // Layout (left to right): heat pump 8–64, its flow/return chips, small hot water tank 140–172,
-    // house 200–500 (buffer, radiators, bathroom at the right end), yard. Ground line y 296.
+    // house 180–560 (buffer, radiators, living area and bathroom). Ground line y 342.
     // Heating lanes run above the tank into the house; the hot water lanes end in the tank. Hot water
-    // leaves the tank along the floor (y 244) and rises to the bathroom.
-    const HPL = 8, HPR = 64, CX = 102, TX = 140, TW = 32, TY = 236, TH = 60, HL = 200, HRW = 500, EAVE = 100, APEX = 60;
-    const HR = 196, HF = 224, WF = 248, WR = 276, SY = 244, SX = 236, END = 376, RX = 486, RT = 120;
+    // leaves the tank along the floor (y 316) and rises to the bathroom.
+    const HPL = 8, HPR = 64, CX = 102, TX = 140, TW = 32, TY = 270, TH = 72, HL = 180, HRW = 560, EAVE = 100, APEX = 54;
+    const HR = 196, HF = 224, WF = 282, WR = 322, SY = 316, SX = 220, END = 344, RX = 540, RT = 120;
     const ridge = (HL + HRW) / 2;
     let heat;
     if (storage === "none") {
@@ -357,7 +352,7 @@ class Open3eHeatpumpCard extends HTMLElement {
       heat += storage === "buffer"
         ? `<g class="${this._id("buffer") ? "click" : ""}" data-entity="${esc(this._id("buffer"))}">
             <rect x="${sx0}" y="182" width="52" height="56" rx="14" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>
-            ${buf !== null ? `<text x="${SX}" y="217" text-anchor="middle" class="tv">${esc(deg(buf))}</text>` : ""}</g>`
+            ${buf !== null ? chip(SX, 210, buf, LINE, "buffer") : ""}</g>`
         : `<rect x="${SX - 6}" y="184" width="12" height="52" rx="5" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>`;
     }
     // Tank fill: empty 15 K below the target, full at the target; purple once reached.
@@ -366,11 +361,11 @@ class Open3eHeatpumpCard extends HTMLElement {
     const petals = [0, 90, 180, 270].map((a) => `<path d="M0,0 Q-6,-8 0,-15 Q6,-8 0,0" transform="rotate(${a})"/>`).join("");
     const dhwId = esc(this._id("dhw_set") || this._id("dhw"));
     return `<div class="schema">
-      <svg viewBox="0 54 610 318" role="img" aria-label="${esc(t.schema)}">
+      <svg viewBox="0 48 610 304" role="img" aria-label="${esc(t.schema)}">
         <defs><clipPath id="o3e-tank"><rect x="${TX}" y="${TY}" width="${TW}" height="${TH}" rx="12"/></clipPath></defs>
         <g class="sc">
-          <path d="M${HL},296 V${EAVE} M${HRW},${EAVE} V296 M${HL - 12},${EAVE} L${ridge},${APEX} L${HRW + 12},${EAVE}"/>
-          <line x1="0" x2="610" y1="296" y2="296"/>
+          <path d="M${HL},342 V${EAVE} M${HRW},${EAVE} V342 M${HL - 12},${EAVE} L${ridge},${APEX} L${HRW + 12},${EAVE}"/>
+          <line x1="0" x2="610" y1="342" y2="342"/>
         </g>
         ${heat}
         ${pipe(`${HPR},${WF} ${TX},${WF}`, FLOW, dhwOn)}
@@ -382,8 +377,8 @@ class Open3eHeatpumpCard extends HTMLElement {
           ${fill > 0 ? `<rect x="${TX}" y="${TY + TH * (1 - fill)}" width="${TW}" height="${TH * fill}" clip-path="url(#o3e-tank)"
             style="fill:color-mix(in srgb, ${fillColor} 22%, transparent)"/>` : ""}
           ${dhwOn ? `<g fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="${TX},${WF} ${TX + 22},${WF} ${TX + 22},262" stroke="${FLOW}"/>
-            <polyline points="${TX + 22},262 ${TX + 10},262 ${TX + 10},${WR} ${TX},${WR}" stroke="${RET}"/></g>` : ""}
+            <polyline points="${TX},${WF} ${TX + 22},${WF} ${TX + 22},302" stroke="${FLOW}"/>
+            <polyline points="${TX + 22},302 ${TX + 10},302 ${TX + 10},${WR} ${TX},${WR}" stroke="${RET}"/></g>` : ""}
         </g>
         <g class="click" data-entity="${dhwId}" fill="none" stroke="${LINE}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M${RX - 36},${RT + 62} H${RX - 4} Q${RX - 4},${RT + 78} ${RX - 20},${RT + 78} Q${RX - 36},${RT + 78} ${RX - 36},${RT + 62} Z M${RX - 20},${RT + 78} V${RT + 90}"/>
@@ -394,16 +389,16 @@ class Open3eHeatpumpCard extends HTMLElement {
           ${radiator(280, 190, 38, 40, heatOn ? C.heat : LINE)}${radiator(326, 190, 38, 40, heatOn ? C.heat : LINE)}
         </g>
         <g class="click" data-entity="${esc(this._id("compressor"))}">
-          <rect x="${HPL}" y="180" width="56" height="116" rx="6" fill="${BG}" stroke="${hpColor}" stroke-width="1.2"/>
-          <circle cx="${HPL + 28}" cy="220" r="21" fill="none" stroke="${hpColor}" stroke-width="1.2"/>
-          <g transform="translate(${HPL + 28} 220)" stroke="${hpColor}" stroke-width="1.2" fill="none" stroke-linejoin="round"><g class="${comp ? "spin" : ""}">${petals}</g></g>
-          <path d="M${HPL + 10},262 H${HPL + 46} M${HPL + 10},272 H${HPL + 46} M${HPL + 10},282 H${HPL + 46}" stroke="${hpColor}" stroke-width="1.2" stroke-linecap="round"/>
+          <rect x="${HPL}" y="216" width="56" height="126" rx="6" fill="${BG}" stroke="${hpColor}" stroke-width="1.2"/>
+          <circle cx="${HPL + 28}" cy="256" r="21" fill="none" stroke="${hpColor}" stroke-width="1.2"/>
+          <g transform="translate(${HPL + 28} 256)" stroke="${hpColor}" stroke-width="1.2" fill="none" stroke-linejoin="round"><g class="${comp ? "spin" : ""}">${petals}</g></g>
+          <path d="M${HPL + 10},300 H${HPL + 46} M${HPL + 10},310 H${HPL + 46} M${HPL + 10},320 H${HPL + 46}" stroke="${hpColor}" stroke-width="1.2" stroke-linecap="round"/>
         </g>
         ${dhwOn
           ? `${chip(CX, WF, wp, FLOW, "flow_wp")}${chip(CX, WR, ret, RET, "return")}`
           : `${chip(CX, HF, wp, FLOW, "flow_wp")}${chip(CX, HR, ret, RET, "return")}`}
         ${vals(280, 142, hk, target, "flow_hk", "flow_target")}
-        ${vals(384, 142, tv, tset, "dhw", "dhw_set", !dhwOn)}
+        ${vals(410, 142, tv, tset, "dhw", "dhw_set", !dhwOn)}
         ${people}
       </svg></div>`;
   }
@@ -637,9 +632,9 @@ class Open3eHeatpumpCard extends HTMLElement {
     const kw = (w) => (w / 1000).toLocaleString(this._hass.locale?.language || "en", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
     const metrics = (this._config.header_metrics ?? DEFAULT_HEADER_METRICS).filter((x) => HEADER_METRICS.includes(x));
     const metric = {
-      outside: this._id("outside") ? `<div class="metric click" data-entity="${esc(this._id("outside"))}"><ha-icon icon="mdi:thermometer"></ha-icon><span><small>${esc(t.outside)}</small><b>${esc(this._fmt("outside"))}</b></span></div>` : "",
-      power: pe !== null || pt !== null ? `<div class="metric power click" data-entity="${esc(this._id("power_th") || this._id("power_el"))}"><ha-icon icon="mdi:lightning-bolt"></ha-icon><span><small>${esc(t.power)}</small><b>${pt !== null ? `${kw(pt)} kW` : "–"}<em>${pe !== null ? `${kw(pe)} kW ${esc(t.electrical.toLowerCase())}` : ""}</em></b></span></div>` : "",
-      cop: cop !== null || copDay !== null ? `<div class="metric click" data-entity="${esc(this._id("cop"))}" style="--c:${copColor}"><ha-icon icon="mdi:gauge"></ha-icon><span><small>${esc(t.efficiency)}</small><b>COP ${this._n(cop)}<em>${copDay !== null ? `${esc(t.today)} ${this._n(copDay)}` : ""}</em></b></span></div>` : "",
+      outside: this._id("outside") ? `<span class="meta click" data-entity="${esc(this._id("outside"))}"><ha-icon icon="mdi:thermometer"></ha-icon>${esc(t.outside)} ${esc(this._fmt("outside"))}</span>` : "",
+      power: pe !== null || pt !== null ? `<span class="meta click" data-entity="${esc(this._id("power_th") || this._id("power_el"))}">${pt !== null ? `<ha-icon icon="mdi:fire"></ha-icon>${kw(pt)} kW` : ""}${pe !== null ? `<ha-icon icon="mdi:flash"></ha-icon>${kw(pe)} kW` : ""}</span>` : "",
+      cop: cop !== null || copDay !== null ? `<span class="chip click" data-entity="${esc(this._id("cop"))}" style="--c:${copColor}">COP ${this._n(cop)}${copDay !== null ? ` · ${esc(t.today)} ${this._n(copDay)}` : ""}</span>` : "",
     };
     return `<div class="head">
       <div class="headline"><div class="title">${esc(this._config.title ?? t.title)}</div>${state}
@@ -680,23 +675,19 @@ class Open3eHeatpumpCard extends HTMLElement {
 }
 
 const STYLE = `
-  ha-card { padding: 16px; overflow: hidden; }
-  .head { margin-bottom: 12px; }
-  .headline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
-  .title { font-size: 1.22em; line-height: 1.2; font-weight: 600; margin-right: auto; }
+  ha-card { padding: 12px; overflow: hidden; }
+  .head { margin-bottom: 10px; }
+  .headline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .title { font-size: 1.15em; line-height: 1.2; font-weight: 500; margin-right: auto; }
   .state { --c: ${C.off}; display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border-radius: 999px;
            color: var(--c); background: color-mix(in srgb, var(--c) 13%, transparent); font-size: .82em; font-weight: 600; }
   .state i { width: 7px; height: 7px; border-radius: 50%; background: var(--c); box-shadow: 0 0 0 3px color-mix(in srgb, var(--c) 16%, transparent); }
   .alert { display: inline-flex; align-items: center; gap: 4px; color: ${C.bad}; font-size: .82em; font-weight: 600; }
   .alert ha-icon { --mdc-icon-size: 17px; }
-  .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 8px; }
-  .metric { --c: var(--primary-color); min-width: 0; display: flex; align-items: center; gap: 9px; padding: 9px 10px; border-radius: 11px;
-            background: color-mix(in srgb, var(--primary-text-color) 4%, transparent); border: 1px solid color-mix(in srgb, var(--primary-text-color) 9%, transparent); }
-  .metric ha-icon { --mdc-icon-size: 21px; flex: none; color: var(--c); }
-  .metric span { min-width: 0; display: flex; flex-direction: column; }
-  .metric small { color: var(--secondary-text-color); font-size: .68em; line-height: 1.2; }
-  .metric b { font-size: .95em; line-height: 1.35; white-space: nowrap; }
-  .metric em { margin-left: 6px; color: var(--secondary-text-color); font-size: .72em; font-style: normal; font-weight: 400; }
+  .metrics { display: flex; flex-wrap: wrap; align-items: center; gap: 5px 10px; color: var(--secondary-text-color); font-size: .88em; }
+  .meta { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; }
+  .meta ha-icon { --mdc-icon-size: 16px; }
+  .meta ha-icon:not(:first-child) { margin-left: 4px; }
   .chip { padding: 2px 10px; border-radius: 12px; font-size: 0.85em; font-weight: 500;
           color: var(--c); background: color-mix(in srgb, var(--c) 18%, transparent); }
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; }
@@ -747,14 +738,14 @@ const STYLE = `
   .schema svg { display: block; width: 100%; height: auto; overflow: visible; }
   .schema .sc { fill: none; stroke: #3d6ea8; stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
   .schema text { fill: var(--primary-text-color); font-family: inherit; }
-  .schema .tv { font-size: 20px; font-weight: 600; }
+  .schema .tv { font-size: 17px; font-weight: 600; }
   .schema .tgt { fill: ${C.target}; }
-  .schema .pn { font-size: 24px; font-weight: 500; }
+  .schema .pn { font-size: 15px; font-weight: 500; }
   .schema foreignObject ha-icon { display: block; }
   .schema .spin { animation: o3e-spin 1.4s linear infinite; }
   @keyframes o3e-spin { to { transform: rotate(360deg); } }
   @media (prefers-reduced-motion: reduce) { .schema .spin { animation: none; } }
-  @media (max-width: 360px) { ha-card { padding: 12px; } .metrics { grid-template-columns: repeat(2, 1fr); } .metric.power { grid-column: 1 / -1; } }
+  @media (max-width: 360px) { .metrics { gap: 4px 8px; font-size: .82em; } }
 `;
 
 // ha-form is only defined once HA has loaded it; an entities card editor pulls it in.
