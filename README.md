@@ -88,8 +88,8 @@ not come back. The tank fill shows the actual temperature against the target
 (empty 15 K below, purple once reached). Pipes are thin with rounded corners;
 small dots travel along the active loop (flow red, return blue), idle pipes
 stay coloured but faint. All temperatures use the same text size: the
-actual value in the text colour, the target in purple; while no hot water is
-being made only the hot water target is shown. The hot water values sit inside
+actual value in the text colour, the target in purple; the hot water actual
+and target are always shown. The hot water values sit inside
 the house next to the bathroom. The buffer shows a temperature
 only if a sensor is available (DID 279, or `entities: {buffer: sensor.x}`).
 Tap a value for its history. With *reduce motion* switched on in the
@@ -124,7 +124,7 @@ Optional tiles below the card (tap for details / to change a setpoint):
 | Warmwasser Ist/Soll | tank / setpoint (tap to change the setpoint) | blue = charging, red = below the switch-on point, green = ok |
 | Einmalladung | one-time charge | blue = on |
 
-Options: `title`, `timeline` (default `true`), `hours_to_show` (default 24),
+Options: `title`, `language` (`auto` = Home Assistant user language, `de`, `en`; default `auto`), `timeline` (default `true`), `hours_to_show` (default 24),
 `header_metrics` (ordered list of `outside`, `power`, `cop`; all three by default),
 `temp_bar` (system diagram, default `true`), `storage` (`separator` | `buffer` | `none`),
 `show_people` (default `true`), `person1_name`, `person1_tracker`, `person2_name`, `person2_tracker`, `curve` (heating curve, default `true`),

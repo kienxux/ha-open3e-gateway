@@ -22,7 +22,7 @@
  * so renamed entities keep working. No external libraries. The card has a visual
  * editor (ha-form).
  */
-const VERSION = "0.10.1";
+const VERSION = "0.10.3";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
@@ -69,6 +69,10 @@ const HEADER_METRICS = ["outside", "power", "cop"];
 const DEFAULT_HOURS = 24;
 const HISTORY_REFRESH_MS = 5 * 60 * 1000;
 
+const LANGS = ["de", "en"];
+const cardLang = (config, hass) => LANGS.includes(config?.language) ? config.language
+  : (hass?.locale?.language || hass?.language || "en").startsWith("de") ? "de" : "en";
+
 const TEXT = {
   de: {
     title: "Wärmepumpe", circuit: "Heizkreis", compressor: "Verdichter", flow_target: "Vorlauf-Soll",
@@ -79,6 +83,7 @@ const TEXT = {
     save: "Speichern", cancel: "Abbrechen",
     level_slope: "Niveau · Neigung",
     dhw_set: "WW-Soll", one_time: "Einmalladung", heater: "Heizstab", outside: "Außen", errors: "Fehler",
+    states: { off: "Aus", standby: "Bereit", heating: "Heizen", dhw: "Warmwasser", heater: "Heizstab" },
     power: "Leistung", thermal: "Thermisch", electrical: "Elektrisch", efficiency: "Effizienz", on: "An", off: "Aus", missing: "Integration open3e Gateway nicht gefunden", now: "jetzt",
     modes: { Off: "Aus", Heating: "Heizen", Automatic: "Automatik", Cooling: "Kühlen",
              "Parallel Operation: Heating HotWater": "Heizen + WW", "Parallel Operation: Heating Cooling": "Heizen/Kühlen",
@@ -93,6 +98,7 @@ const TEXT = {
     save: "Save", cancel: "Cancel",
     level_slope: "Curve level · slope",
     dhw_set: "DHW target", one_time: "One-time charge", heater: "Heater", outside: "Outside", errors: "errors",
+    states: { off: "Off", standby: "Standby", heating: "Heating", dhw: "Hot water", heater: "Heater" },
     power: "Power", thermal: "Thermal", electrical: "Electrical", efficiency: "Efficiency", on: "On", off: "Off", missing: "open3e Gateway integration not found", now: "now", modes: {},
   },
 };
@@ -237,7 +243,7 @@ class Open3eHeatpumpCard extends HTMLElement {
     </div>`;
   }
 
-  _dec() { return (1.5).toLocaleString(this._hass.locale?.language || "en").charAt(1); }
+  _dec() { return (1.5).toLocaleString(this._locale()).charAt(1); }
 
   async _curveAction(act) {
     const level0 = this._num("level");
@@ -271,7 +277,7 @@ class Open3eHeatpumpCard extends HTMLElement {
   // the floor and rises to the bathroom at the right end (shower, tap over the sink); it does not come
   // back. Two people at the house. Only the active loop is animated (dots travel along the pipes: flow
   // red, return blue); idle pipes stay coloured but fainter. Actual values in the text colour, targets
-  // in purple; the hot water values show only the target while no hot water is made.
+  // in purple; the hot water actual and target are always shown.
   _schematic() {
     if (this._config.temp_bar === false) return "";
     const t = this._t();
@@ -331,9 +337,9 @@ class Open3eHeatpumpCard extends HTMLElement {
         <text x="${x}" y="329" text-anchor="middle" class="pn" stroke="none">${esc(name)}</text></g>`;
     };
     const people = this._config.show_people === false ? "" : person(1) + person(2);
-    const vals = (x, y, act, set, actTile, setTile, targetOnly = false) => `
-      ${targetOnly && set !== null ? "" : chip(x, y, act, LINE, actTile)}
-      ${set !== null ? chip(x, targetOnly ? y : y + 29, set, C.target, setTile, true) : ""}`;
+    const vals = (x, y, act, set, actTile, setTile) => `
+      ${chip(x, y, act, LINE, actTile)}
+      ${set !== null ? chip(x, y + 29, set, C.target, setTile, true) : ""}`;
 
     // Layout (left to right): heat pump 8–64, its flow/return chips, small hot water tank 140–172,
     // house 180–560 (buffer, radiators, living area and bathroom). Ground line y 342.
@@ -398,7 +404,7 @@ class Open3eHeatpumpCard extends HTMLElement {
           ? `${chip(CX, WF, wp, FLOW, "flow_wp")}${chip(CX, WR, ret, RET, "return")}`
           : `${chip(CX, HF, wp, FLOW, "flow_wp")}${chip(CX, HR, ret, RET, "return")}`}
         ${vals(280, 142, hk, target, "flow_hk", "flow_target")}
-        ${vals(410, 142, tv, tset, "dhw", "dhw_set", !dhwOn)}
+        ${vals(410, 142, tv, tset, "dhw", "dhw_set")}
         ${people}
       </svg></div>`;
   }
@@ -453,7 +459,7 @@ class Open3eHeatpumpCard extends HTMLElement {
     this._loadHistory(id);
     const { segs, start, now } = this._segments(id);
     const span = now - start;
-    const lang = this._hass.locale?.language || "en";
+    const lang = this._locale();
     const time = (ms) => new Date(ms).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" });
     const dur = (ms) => {
       const m = Math.round(ms / 60000);
@@ -461,7 +467,7 @@ class Open3eHeatpumpCard extends HTMLElement {
     };
     const stateObj = this._hass.states[id];
     const label = (s) => ["unavailable", "unknown"].includes(s) ? "–"
-      : stateObj && this._hass.formatEntityState ? this._hass.formatEntityState(stateObj, s) : s;
+      : this._t().states[s] || (stateObj && this._hass.formatEntityState ? this._hass.formatEntityState(stateObj, s) : s);
     const bars = segs.map((g) => {
       const left = ((g.from - start) / span) * 100, width = ((g.to - g.from) / span) * 100;
       const color = STATE_COLOR[g.s] || C.off;
@@ -504,7 +510,11 @@ class Open3eHeatpumpCard extends HTMLElement {
     this._render();
   }
 
-  _t() { return (this._hass?.locale?.language || this._hass?.language || "en").startsWith("de") ? TEXT.de : TEXT.en; }
+  // Card language: `language: de|en` in the config, otherwise the Home Assistant user language.
+  _lang() { return cardLang(this._config, this._hass); }
+  _t() { return TEXT[this._lang()]; }
+  // Locale for numbers and times: HA's own locale in auto mode, else the chosen language.
+  _locale() { return LANGS.includes(this._config?.language) ? this._lang() : this._hass?.locale?.language || "en"; }
 
   _id(tile) {
     const o = this._config.entities || {};
@@ -518,11 +528,14 @@ class Open3eHeatpumpCard extends HTMLElement {
   _fmt(tile) {
     const s = this._st(tile);
     if (!s || ["unavailable", "unknown"].includes(s.state)) return "–";
+    if (tile === "state" && this._t().states[s.state]) return this._t().states[s.state];
+    const v = parseFloat(s.state);
+    if (s.attributes.unit_of_measurement && String(v) === s.state.trim()) return `${this._n(v)} ${s.attributes.unit_of_measurement}`;
     return this._hass.formatEntityState ? this._hass.formatEntityState(s) : `${s.state} ${s.attributes.unit_of_measurement || ""}`;
   }
 
   _n(x, digits = 1) {
-    return x === null ? "–" : x.toLocaleString(this._hass.locale?.language || "en",
+    return x === null ? "–" : x.toLocaleString(this._locale(),
       { maximumFractionDigits: 1, minimumFractionDigits: digits });
   }
 
@@ -629,7 +642,7 @@ class Open3eHeatpumpCard extends HTMLElement {
     const copColor = ref === null ? C.off : ref >= 3.5 ? C.ok : ref >= 2.5 ? C.warn : C.bad;
     const errors = this._num("errors");
     const pe = this._num("power_el"), pt = this._num("power_th");
-    const kw = (w) => (w / 1000).toLocaleString(this._hass.locale?.language || "en", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+    const kw = (w) => (w / 1000).toLocaleString(this._locale(), { maximumFractionDigits: 1, minimumFractionDigits: 1 });
     const metrics = (this._config.header_metrics ?? DEFAULT_HEADER_METRICS).filter((x) => HEADER_METRICS.includes(x));
     const metric = {
       outside: this._id("outside") ? `<span class="meta click" data-entity="${esc(this._id("outside"))}"><ha-icon icon="mdi:thermometer"></ha-icon>${esc(t.outside)} ${esc(this._fmt("outside"))}</span>` : "",
@@ -651,7 +664,7 @@ class Open3eHeatpumpCard extends HTMLElement {
     const c = this._config;
     const ids = [...new Set([...Object.keys(KEYS).map((k) => this._id(k)), c.normal_level_entity,
       c.person1_tracker || c.person1_entity, c.person2_tracker || c.person2_entity])].filter(Boolean);
-    const sig = (this._error || "") + JSON.stringify(this._draft || null) + (this._curveError || "") + this._hass.language + (this._hist ? this._hist.length : "-")
+    const sig = (this._error || "") + JSON.stringify(this._draft || null) + (this._curveError || "") + this._locale() + (this._hist ? this._hist.length : "-")
       + Math.floor(Date.now() / 60000) + ids.map((i) => {
       const s = this._hass.states[i]; return s ? s.state + s.last_updated : "-";
     }).join("|");
@@ -764,12 +777,14 @@ const EDITOR_TEXT = {
     title: "Titel", temp_bar: "Anlagenschema (Vor-/Rücklauf) anzeigen", storage: "Zwischen Wärmepumpe und Heizung", separator: "Hydraulische Weiche", buffer: "Pufferspeicher", none: "Nichts (direkt)", curve: "Heizkurve anzeigen", curve_controls: "Neigung und Niveau unter der Heizkurve", timeline: "Verlauf Betriebszustand anzeigen", hours_to_show: "Stunden im Verlauf",
     header_metrics: "Kennzahlen im Kopf (Reihenfolge per Ziehen)", outside: "Außentemperatur", cop: "COP / Effizienz", tiles: "Kacheln (Reihenfolge per Ziehen)", normal_level_entity: "Normales Heizkurven-Niveau (Helfer)",
     entities: "Entitäten überschreiben (optional)", state: "Betriebszustand",
+    language: "Sprache", lang_auto: "Wie Home Assistant", lang_de: "Deutsch", lang_en: "English",
   },
   en: {
     show_people: "Show people at the house", people: "People", person1_name: "Name of person 1", person1_tracker: "Person 1 tracker (optional)", person2_name: "Name of person 2", person2_tracker: "Person 2 tracker (optional)",
     title: "Title", temp_bar: "Show system diagram (flow/return)", storage: "Between heat pump and heating", separator: "Hydraulic separator", buffer: "Buffer tank", none: "Nothing (direct)", curve: "Show heating curve", curve_controls: "Slope and curve level below the curve", timeline: "Show operating state timeline", hours_to_show: "Hours in timeline",
     header_metrics: "Header metrics (drag to reorder)", outside: "Outside temperature", cop: "COP / efficiency", tiles: "Tiles (drag to reorder)", normal_level_entity: "Normal curve level (helper)",
     entities: "Override entities (optional)", state: "Operating state",
+    language: "Language", lang_auto: "Same as Home Assistant", lang_de: "Deutsch", lang_en: "English",
   },
 };
 
@@ -786,12 +801,16 @@ class Open3eHeatpumpCardEditor extends HTMLElement {
     this._update();
   }
 
-  _lang() { return (this._hass?.locale?.language || this._hass?.language || "en").startsWith("de") ? "de" : "en"; }
+  _lang() { return cardLang(this._config, this._hass); }
 
   _schema() {
     const t = TEXT[this._lang()];
     return [
-      { name: "title", selector: { text: {} } },
+      { type: "grid", name: "", schema: [
+        { name: "title", selector: { text: {} } },
+        { name: "language", selector: { select: { mode: "dropdown",
+          options: ["auto", ...LANGS].map((k) => ({ value: k, label: EDITOR_TEXT[this._lang()][`lang_${k}`] })) } } },
+      ] },
       { name: "header_metrics", selector: { select: { multiple: true, reorder: true,
         options: HEADER_METRICS.map((k) => ({ value: k, label: EDITOR_TEXT[this._lang()][k] || t[k] || k })) } } },
       { type: "grid", name: "", schema: [
