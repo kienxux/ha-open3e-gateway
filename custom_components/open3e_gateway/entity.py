@@ -21,6 +21,9 @@ def add_tracked(coordinator: Open3eCoordinator, async_add_entities, entities) ->
     disabled and never reach hass), for removing stale registry entries."""
     entities = list(entities)
     coordinator.created_unique_ids.update(e.unique_id for e in entities if e.unique_id)
+    coordinator.enabled_default_ids.update(
+        e.unique_id for e in entities if e.unique_id and e.entity_registry_enabled_default
+    )
     async_add_entities(entities)
 
 

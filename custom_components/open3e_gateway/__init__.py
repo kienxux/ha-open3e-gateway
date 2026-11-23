@@ -108,6 +108,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: Open3eConfigEntry) -> bo
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     _remove_stale_entities(hass, entry)
+    if _enable_now_default_entities(hass, entry):
+        # Newly enabled entities only appear after a reload.
+        hass.config_entries.async_schedule_reload(entry.entry_id)
     entry.async_on_unload(entry.add_update_listener(_async_reload))
     return True
 
@@ -125,6 +128,21 @@ def _remove_stale_entities(hass: HomeAssistant, entry: Open3eConfigEntry) -> Non
     for ent in er.async_entries_for_config_entry(reg, entry.entry_id):
         if ent.unique_id not in created:
             reg.async_remove(ent.entity_id)
+
+
+def _enable_now_default_entities(hass: HomeAssistant, entry: Open3eConfigEntry) -> bool:
+    """Entities an older version created disabled by default (e.g. the 1192
+    flow limits, once taken for sensor statistics) stay disabled in the
+    registry. Re-enable those that are enabled by default now; entities the
+    user disabled (disabled_by=user) are left alone."""
+    wanted = entry.runtime_data.coordinator.enabled_default_ids
+    reg = er.async_get(hass)
+    changed = False
+    for ent in er.async_entries_for_config_entry(reg, entry.entry_id):
+        if ent.disabled_by is er.RegistryEntryDisabler.INTEGRATION and ent.unique_id in wanted:
+            reg.async_update_entity(ent.entity_id, disabled_by=None)
+            changed = True
+    return changed
 
 
 async def _async_reload(hass: HomeAssistant, entry: Open3eConfigEntry) -> None:

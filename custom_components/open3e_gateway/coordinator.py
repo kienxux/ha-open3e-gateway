@@ -58,6 +58,8 @@ class Open3eCoordinator(DataUpdateCoordinator[dict[PointKey, Any]]):
         # Filled by the entities as they are created; used to drop registry
         # entries of datapoints that left the selection.
         self.created_unique_ids: set[str] = set()
+        # Unique ids of entities that are enabled by default in this version.
+        self.enabled_default_ids: set[str] = set()
         # Device registry id of the gateway; the heat pump ECUs link to it.
         self.gateway_device_id: str | None = None
 

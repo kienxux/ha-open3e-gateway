@@ -104,12 +104,14 @@ the figure is green while home and grey while away; tap it for details.
 outlined label style; target values remain purple.
 
 The heating curve chart shows the flow target over the outside temperature
-(+20 … −30 °C, like the ViCare app) and the current point. The formula
+(from +20 °C down to 15 K below the current outside temperature, at least
+−10 and at most −30 °C; fixed with `curve_outside_min`) and the current point. The formula
 `room target + level − slope · d · (1.4347 + 0.021·d + 0.0002479·d²)`,
 d = outside − room target, reproduces the ViCare app's curve and the
 controller's own flow target (987). It is limited to the circuit's min/max
 flow when DID 1192 (MixerOneCircuitFlowTemperatureMinimumMaximumLimit) is in
-the gateway selection (add it without a range: read-only). With
+the gateway selection (add it without a range: read-only); above the maximum
+the curve stays flat. With
 `curve_controls: true` a row below the chart shows the slope and the level;
 − / + change the level (and the slope, if it is writable) as a draft, *Save*
 writes it.
@@ -129,7 +131,8 @@ Options: `title`, `language` (`auto` = Home Assistant user language, `de`, `en`;
 `header_metrics` (ordered list of `outside`, `power`, `cop`; all three by default),
 `temp_bar` (system diagram, default `true`), `storage` (`separator` | `buffer` | `none`),
 `show_people` (default `true`), `person1_name`, `person1_tracker`, `person2_name`, `person2_tracker`, `curve` (heating curve, default `true`),
-`curve_controls` (slope / level row below the curve, default `false`), `tiles` (list and order; default none;
+`curve_controls` (slope / level row below the curve, default `false`),
+`curve_outside_min` (coldest outside temperature on the curve; default auto: 15 K below the current outside temperature, between −10 and −30 °C), `tiles` (list and order; default none;
 available: level, one_time, compressor, dhw, flow_hk, flow_wp, return, flow_target,
 circuit (heating circuit mode), dhw_set, heater), `entities` (override any entity, e.g. `flow_hk: sensor.x`),
 `entry_id`.

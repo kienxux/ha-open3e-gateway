@@ -13,6 +13,7 @@
  *   person2_name / person2_tracker          # same for figure 2
  *   curve: true                             # optional: heating curve chart (default on)
  *   curve_controls: false                   # optional: slope / curve level row below the curve
+ *   curve_outside_min: -20                  # optional: coldest outside temperature on the curve (default: auto)
  *   header_metrics: [outside, power, cop]    # optional: header metrics and order
  *   tiles: [compressor, flow_hk, ...]       # optional: which tiles, in which order (default none)
  *   normal_level_entity: input_number.x     # optional: marks a raised heating curve
@@ -22,7 +23,7 @@
  * so renamed entities keep working. No external libraries. The card has a visual
  * editor (ha-form).
  */
-const VERSION = "0.11.1";
+const VERSION = "0.12.0";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
@@ -199,16 +200,22 @@ class Open3eHeatpumpCard extends HTMLElement {
     const changed = level !== level0 || slope !== slope0;
     const outside = this._num("outside");
     const hi = this._num("flow_max");
-    // Chart: outside +20 (left) .. -30 (right) like the ViCare app.
-    const X0 = 44, X1 = 420, Y0 = 200, Y1 = 34;
-    const pts = [20, 10, 0, -10, -20, -30];
+    // Chart: outside +20 (left) down to the coldest shown temperature (right) like the ViCare app.
+    // Zoomed to the current weather: the right edge is 15 K below the current outside temperature
+    // (at least -10, at most -30, rounded to 5 K); `curve_outside_min` fixes it instead.
+    const X0 = 44, X1 = 420, Y0 = 200, Y1 = 34, AT0 = 20;
+    const cfgMin = Number(this._config.curve_outside_min);
+    const AT1 = Number.isFinite(cfgMin) && cfgMin < 10 ? Math.max(-40, cfgMin)
+      : Math.max(-30, Math.min(-10, Math.floor(((outside ?? -15) - 15) / 5) * 5));
+    const step = AT0 - AT1 > 35 ? 10 : 5;
+    const pts = []; for (let at = AT0; at >= AT1; at -= step) pts.push(at);
     const val = (at, lv, sl) => this._clamp(this._curveCalc(at, room, lv, sl).raw);
     const all = [];
-    for (let at = 20; at >= -30; at -= 2) all.push(val(at, level, slope), val(at, level0, slope0));
+    for (let at = AT0; at >= AT1; at -= 1) all.push(val(at, level, slope), val(at, level0, slope0));
     const ymin = Math.floor((Math.min(...all) - 5) / 10) * 10, ymax = Math.ceil((Math.max(...all) + 5) / 10) * 10;
-    const x = (at) => X0 + ((20 - at) / 50) * (X1 - X0);
+    const x = (at) => X0 + ((AT0 - at) / (AT0 - AT1)) * (X1 - X0);
     const y = (v) => Y0 - ((v - ymin) / (ymax - ymin)) * (Y0 - Y1);
-    const line = (lv, sl) => { const a = []; for (let at = 20; at >= -30; at -= 1) a.push(`${x(at).toFixed(1)},${y(val(at, lv, sl)).toFixed(1)}`); return a; };
+    const line = (lv, sl) => { const a = []; for (let at = AT0; at >= AT1; at -= 0.5) a.push(`${x(at).toFixed(1)},${y(val(at, lv, sl)).toFixed(1)}`); return a; };
     const cur = line(level, slope);
     const grid = pts.map((at) => `<line x1="${x(at)}" y1="${Y1 - 6}" x2="${x(at)}" y2="${Y0}" class="gl"/>
       <text x="${x(at)}" y="${Y0 + 16}" text-anchor="middle" class="ax">${at > 0 ? "+" : ""}${at}°</text>`).join("");
@@ -218,7 +225,7 @@ class Open3eHeatpumpCard extends HTMLElement {
     let now = "";
     if (outside !== null) {
       const v = this._clamp(this._curveCalc(outside, room, level, slope).raw);
-      const ox = x(Math.min(20, Math.max(-30, outside)));
+      const ox = x(Math.min(AT0, Math.max(AT1, outside)));
       now = `<line x1="${ox}" y1="${Y1 - 6}" x2="${ox}" y2="${Y0}" class="nowl"/>
         <text x="${Math.min(Math.max(ox, X0 + 70), X1 - 70)}" y="${Y1 - 14}" text-anchor="middle" class="nowt">${esc(t.now_word)}: ${this._n(outside)}° → ${this._n(v)}°</text>`;
     }
@@ -236,7 +243,7 @@ class Open3eHeatpumpCard extends HTMLElement {
         ${changed ? `<polyline points="${line(level0, slope0).join(" ")}" class="old"/>` : ""}
         <polygon points="${X0},${Y0} ${cur.join(" ")} ${X1},${Y0}" class="area"/>
         <polyline points="${cur.join(" ")}" class="cl"/>
-        ${now}${marks}${outside !== null ? `<circle cx="${x(Math.min(20, Math.max(-30, outside)))}" cy="${y(this._clamp(this._curveCalc(outside, room, level, slope).raw))}" r="6" class="nowp"/>` : ""}
+        ${now}${marks}${outside !== null ? `<circle cx="${x(Math.min(AT0, Math.max(AT1, outside)))}" cy="${y(this._clamp(this._curveCalc(outside, room, level, slope).raw))}" r="6" class="nowp"/>` : ""}
       </svg>
       ${this._config.curve_controls === true ? `<div class="ctls">${ctl("slope", t.slope, slope, canSlope, 1)}${ctl("level", t.level, level, canLevel, 0)}
         ${changed ? `<button class="btn save" data-act="save">${esc(t.save)}</button><button class="btn" data-act="reset">${esc(t.cancel)}</button>` : ""}</div>` : ""}
@@ -783,14 +790,14 @@ async function ensureHaForm() {
 const EDITOR_TEXT = {
   de: {
     show_people: "Personen am Haus anzeigen", people: "Personen", person1_name: "Name Person 1", person1_tracker: "Tracker Person 1 (optional)", person2_name: "Name Person 2", person2_tracker: "Tracker Person 2 (optional)",
-    title: "Titel", temp_bar: "Anlagenschema (Vor-/Rücklauf) anzeigen", storage: "Zwischen Wärmepumpe und Heizung", separator: "Hydraulische Weiche", buffer: "Pufferspeicher", none: "Nichts (direkt)", curve: "Heizkurve anzeigen", curve_controls: "Neigung und Niveau unter der Heizkurve", timeline: "Verlauf Betriebszustand anzeigen", hours_to_show: "Stunden im Verlauf",
+    title: "Titel", temp_bar: "Anlagenschema (Vor-/Rücklauf) anzeigen", storage: "Zwischen Wärmepumpe und Heizung", separator: "Hydraulische Weiche", buffer: "Pufferspeicher", none: "Nichts (direkt)", curve: "Heizkurve anzeigen", curve_controls: "Neigung und Niveau unter der Heizkurve", curve_outside_min: "Kälteste Außentemperatur der Kurve (leer = automatisch)", timeline: "Verlauf Betriebszustand anzeigen", hours_to_show: "Stunden im Verlauf",
     header_metrics: "Kennzahlen im Kopf (Reihenfolge per Ziehen)", outside: "Außentemperatur", cop: "COP / Effizienz", tiles: "Kacheln (Reihenfolge per Ziehen)", normal_level_entity: "Normales Heizkurven-Niveau (Helfer)",
     entities: "Entitäten überschreiben (optional)", state: "Betriebszustand",
     language: "Sprache", lang_auto: "Wie Home Assistant", lang_de: "Deutsch", lang_en: "English",
   },
   en: {
     show_people: "Show people at the house", people: "People", person1_name: "Name of person 1", person1_tracker: "Person 1 tracker (optional)", person2_name: "Name of person 2", person2_tracker: "Person 2 tracker (optional)",
-    title: "Title", temp_bar: "Show system diagram (flow/return)", storage: "Between heat pump and heating", separator: "Hydraulic separator", buffer: "Buffer tank", none: "Nothing (direct)", curve: "Show heating curve", curve_controls: "Slope and curve level below the curve", timeline: "Show operating state timeline", hours_to_show: "Hours in timeline",
+    title: "Title", temp_bar: "Show system diagram (flow/return)", storage: "Between heat pump and heating", separator: "Hydraulic separator", buffer: "Buffer tank", none: "Nothing (direct)", curve: "Show heating curve", curve_controls: "Slope and curve level below the curve", curve_outside_min: "Coldest outside temperature on the curve (empty = auto)", timeline: "Show operating state timeline", hours_to_show: "Hours in timeline",
     header_metrics: "Header metrics (drag to reorder)", outside: "Outside temperature", cop: "COP / efficiency", tiles: "Tiles (drag to reorder)", normal_level_entity: "Normal curve level (helper)",
     entities: "Override entities (optional)", state: "Operating state",
     language: "Language", lang_auto: "Same as Home Assistant", lang_de: "Deutsch", lang_en: "English",
@@ -843,6 +850,7 @@ class Open3eHeatpumpCardEditor extends HTMLElement {
       { type: "grid", name: "", schema: [
         { name: "curve", selector: { boolean: {} } },
         { name: "curve_controls", selector: { boolean: {} } },
+        { name: "curve_outside_min", selector: { number: { min: -40, max: 5, step: 5, mode: "box", unit_of_measurement: "°C" } } },
       ] },
       { name: "tiles", selector: { select: { multiple: true, reorder: true,
         options: TILE_CHOICES.map((k) => ({ value: k, label: t[k] || k })) } } },
