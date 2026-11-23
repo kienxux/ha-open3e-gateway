@@ -22,7 +22,7 @@
  * so renamed entities keep working. No external libraries. The card has a visual
  * editor (ha-form).
  */
-const VERSION = "0.11.0";
+const VERSION = "0.11.1";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
@@ -274,11 +274,10 @@ class Open3eHeatpumpCard extends HTMLElement {
   // source heat pump (fan spins while the compressor runs), its flow/return (268/269) as outlined chips
   // on the active loop, and a stack of two tanks: the heating storage (hydraulic separator or buffer
   // tank, optional) on top of the hot water tank. From the heating storage the heating loop runs into
-  // the house to two radiators standing on the floor next to the people. Hot water leaves its tank
-  // along the floor and rises to the bathroom at the right end (shower, tap over the sink); it does
-  // not come back. Only the active loop is animated (dots travel along the pipes: flow red, return
+  // the house to two radiators standing on the floor. Hot water runs under the floor to the shower
+  // and the tap over the basin next to the people, who stand at the right wall; it does not come back. Only the active loop is animated (dots travel along the pipes: flow red, return
   // blue); idle pipes stay coloured but fainter. Actual and target share one chip ("41.4/39.9°"):
-  // the actual in the text colour, the target in purple. The hot water values sit at the bathroom.
+  // the actual in the text colour, the target in purple. The hot water values sit above shower and basin.
   _schematic() {
     if (this._config.temp_bar === false) return "";
     const t = this._t();
@@ -323,19 +322,19 @@ class Open3eHeatpumpCard extends HTMLElement {
       const fins = Array.from({ length: 6 }, (_, i) => { const fx = x + (w / 7) * (i + 1); return `M${fx},${y + 7} V${y + h - 7}`; }).join(" ");
       return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="7" fill="${BG}" stroke="${color}" stroke-width="1.2"/><path d="${fins}" fill="none" stroke="${color}" stroke-width="1.2" stroke-linecap="round"/>`;
     };
-    // Both people have a dedicated living area inside the enlarged house. Their tracker changes
-    // the colour (green at home, grey away) without moving them through the diagram.
+    // Both people stand on the floor at the right wall of the house, names above their heads. Their
+    // tracker changes the colour (green at home, grey away) without moving them through the diagram.
     const person = (n) => {
       const eid = this._config[`person${n}_tracker`] || this._config[`person${n}_entity`] || "";
       const st = eid ? this._hass.states[eid] : null;
       const home = st?.state === "home";
       const name = String(this._config[`person${n}_name`] || st?.attributes?.friendly_name || `${t.person} ${n}`).slice(0, 12);
       const color = st ? (home ? C.ok : C.off) : LINE;
-      const x = n === 1 ? 415 : 470, f = 306;
+      const x = n === 1 ? 488 : 534, f = 340;
       return `<g class="${eid ? "click" : ""}" data-entity="${esc(eid)}" stroke="${color}" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="${x}" cy="${f - 51}" r="8"/>
         <path d="M${x},${f - 42} V${f - 18} M${x - 14},${f - 31} L${x},${f - 39} L${x + 14},${f - 31} M${x},${f - 18} L${x - 10},${f} M${x},${f - 18} L${x + 10},${f}"/>
-        <text x="${x}" y="329" text-anchor="middle" class="pn" stroke="none">${esc(name)}</text></g>`;
+        <text x="${x}" y="${f - 66}" text-anchor="middle" class="pn" stroke="none">${esc(name)}</text></g>`;
     };
     const people = this._config.show_people === false ? "" : person(1) + person(2);
     // Actual and target in one chip: "41.4/39.9°", target in purple.
@@ -348,13 +347,16 @@ class Open3eHeatpumpCard extends HTMLElement {
     };
 
     // Layout: heat pump 8–64 (y 186–342), its flow/return chips at x 102, tank stack at x 140–172:
-    // heating storage y 196–256 on top of the hot water tank y 270–342. House 180–560, ground y 342.
-    // Primary heating lanes (HF/HR) and hot water lanes (WF/WR) all run between heat pump and tanks.
-    // Secondary heating loop: flow along y 210 to x 386, down to the radiators (y 268–306), return
-    // along y 298 and up into the storage. Hot water leaves along the floor (y 316) to the bathroom.
+    // heating storage y 196–256 on top of the hot water tank y 270–342. House 180–560; the ground
+    // line y 342 is also the floor. Inside, left to right: radiators, shower and basin, people.
+    // Primary heating lanes (HF/HR) and hot water lanes (WF/WR) run between heat pump and tanks.
+    // Secondary heating loop: flow along y 210 to x 336, down to the radiators (y 302–340), return
+    // along y 332 and up into the storage. Hot water runs under the floor (y 352) to the riser at
+    // x 462, which feeds the shower and the tap over the basin.
     const HPL = 8, HPR = 64, HPT = 186, CX = 102, TX = 140, TW = 32, TY = 270, TH = 72, HL = 180, HRW = 560, EAVE = 100, APEX = 54;
-    const HF = 210, HR = 242, WF = 282, WR = 322, SY = 316, BY = 196, BH = 60, RX = 540, RT = 120;
-    const RAD = 290, RAD_Y = 268, RAD_H = 38, LOOP_X = 386, RF = 276, RR = 298, RV = 214;
+    const HF = 210, HR = 242, WF = 282, WR = 322, SY = 352, BY = 196, BH = 60;
+    const RAD = 240, RAD_Y = 302, RAD_H = 38, LOOP_X = 336, RF = 310, RR = 332, RV = 200;
+    const BX = 462, SHX = 388, SHY = 262, BCX = 432, BTY = 298;
     const ridge = (HL + HRW) / 2;
     // Storage edges where the primary lanes end and the secondary loop starts.
     const [sx0, sx1] = storage === "buffer" ? [TX, TX + TW] : storage === "separator" ? [TX + 10, TX + TW - 10] : [HPR, HPR];
@@ -374,7 +376,7 @@ class Open3eHeatpumpCard extends HTMLElement {
     const petals = [0, 90, 180, 270].map((a) => `<path d="M0,0 Q-6,-8 0,-15 Q6,-8 0,0" transform="rotate(${a})"/>`).join("");
     const dhwId = esc(this._id("dhw_set") || this._id("dhw"));
     return `<div class="schema">
-      <svg viewBox="0 48 610 304" role="img" aria-label="${esc(t.schema)}">
+      <svg viewBox="0 48 610 312" role="img" aria-label="${esc(t.schema)}">
         <defs><clipPath id="o3e-tank"><rect x="${TX}" y="${TY}" width="${TW}" height="${TH}" rx="12"/></clipPath></defs>
         <g class="sc">
           <path d="M${HL},342 V${EAVE} M${HRW},${EAVE} V342 M${HL - 12},${EAVE} L${ridge},${APEX} L${HRW + 12},${EAVE}"/>
@@ -383,8 +385,8 @@ class Open3eHeatpumpCard extends HTMLElement {
         ${heat}
         ${pipe(`${HPR},${WF} ${TX},${WF}`, FLOW, dhwOn)}
         ${pipe(`${TX},${WR} ${HPR},${WR}`, RET, dhwOn)}
-        ${pipe(`${TX + TW},${SY} ${RX},${SY} ${RX},${RT} ${RX - 26},${RT} ${RX - 26},${RT + 8}`, FLOW, true, false)}
-        ${pipe(`${RX},${RT + 50} ${RX - 18},${RT + 50} ${RX - 18},${RT + 56}`, FLOW, true, false)}
+        ${pipe(`${TX + TW / 2},${TY + TH - 4} ${TX + TW / 2},${SY} ${BX},${SY} ${BX},${SHY - 10} ${SHX},${SHY - 10} ${SHX},${SHY}`, FLOW, true, false)}
+        ${pipe(`${BX},${BTY - 10} ${BCX + 6},${BTY - 10} ${BCX + 6},${BTY - 4}`, FLOW, true, false)}
         <g class="click" data-entity="${dhwId}">
           <rect x="${TX}" y="${TY}" width="${TW}" height="${TH}" rx="12" fill="${BG}" stroke="${dhwOn ? C.dhw : LINE}" stroke-width="1.2"/>
           ${fill > 0 ? `<rect x="${TX}" y="${TY + TH * (1 - fill)}" width="${TW}" height="${TH * fill}" clip-path="url(#o3e-tank)"
@@ -394,9 +396,9 @@ class Open3eHeatpumpCard extends HTMLElement {
             <polyline points="${TX + 22},302 ${TX + 10},302 ${TX + 10},${WR} ${TX},${WR}" stroke="${RET}"/></g>` : ""}
         </g>
         <g class="click" data-entity="${dhwId}" fill="none" stroke="${LINE}" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M${RX - 36},${RT + 62} H${RX - 4} Q${RX - 4},${RT + 78} ${RX - 20},${RT + 78} Q${RX - 36},${RT + 78} ${RX - 36},${RT + 62} Z M${RX - 20},${RT + 78} V${RT + 90}"/>
-          <path d="M${RX - 36},${RT + 22} Q${RX - 26},${RT + 8} ${RX - 16},${RT + 22} Z" fill="${BG}"/>
-          <path d="M${RX - 33},${RT + 28} L${RX - 38},${RT + 52} M${RX - 26},${RT + 28} V${RT + 54} M${RX - 19},${RT + 28} L${RX - 14},${RT + 52}" stroke-dasharray="3 5"/>
+          <path d="M${BCX - 16},${BTY} H${BCX + 16} Q${BCX + 16},${BTY + 16} ${BCX},${BTY + 16} Q${BCX - 16},${BTY + 16} ${BCX - 16},${BTY} Z M${BCX},${BTY + 16} V342"/>
+          <path d="M${SHX - 10},${SHY + 14} Q${SHX},${SHY} ${SHX + 10},${SHY + 14} Z" fill="${BG}"/>
+          <path d="M${SHX - 7},${SHY + 20} L${SHX - 12},${SHY + 44} M${SHX},${SHY + 20} V${SHY + 46} M${SHX + 7},${SHY + 20} L${SHX + 12},${SHY + 44}" stroke-dasharray="3 5"/>
         </g>
         <g class="click" data-entity="${esc(this._id("climate") || this._id("flow_hk"))}">
           ${radiator(RAD, RAD_Y, 38, RAD_H, heatOn ? C.heat : LINE)}${radiator(RAD + 46, RAD_Y, 38, RAD_H, heatOn ? C.heat : LINE)}
@@ -410,8 +412,8 @@ class Open3eHeatpumpCard extends HTMLElement {
         ${dhwOn
           ? `${chip(CX, WF, wp, FLOW, "flow_wp")}${chip(CX, WR, ret, RET, "return")}`
           : `${chip(CX, HF, wp, FLOW, "flow_wp")}${chip(CX, HR, ret, RET, "return")}`}
-        ${pair(300, HF, hk, target, "flow_hk")}
-        ${pair(436, RT + 70, tv, tset, this._id("dhw_set") ? "dhw_set" : "dhw")}
+        ${pair(270, HF, hk, target, "flow_hk")}
+        ${pair(425, SHY - 34, tv, tset, this._id("dhw_set") ? "dhw_set" : "dhw")}
         ${people}
       </svg></div>`;
   }

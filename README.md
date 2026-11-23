@@ -82,9 +82,9 @@ of the active loop, and a stack of two tanks between the heat pump and the
 house: the heating storage on top — a hydraulic separator (default), a buffer
 tank (`storage: buffer`) or nothing (`storage: none`) — and the hot water tank
 below. From the heating storage the heating loop runs into the house to two
-radiators standing on the floor next to the people. Hot water leaves its tank
-along the floor and rises to the bathroom at the right end of the house
-(shower, tap over the sink); it does not come back. The tank fill shows the
+radiators standing on the floor. Hot water runs under the floor to the shower
+and the tap over the basin, next to the people at the right wall; it does not
+come back. The tank fill shows the
 actual temperature against the target (empty 15 K below, purple once reached).
 Pipes are thin with rounded corners; small dots travel along the active loop
 (flow red, return blue), idle pipes stay coloured but faint. Actual and target
@@ -96,7 +96,7 @@ temperature only if a sensor is available (DID 279, or
 Tap a value for its history. With *reduce motion* switched on in the
 OS/browser nothing moves.
 
-Two named people stand in a dedicated living area inside the house (default
+Two named people stand on the floor at the right wall of the house, names above their heads (default
 "Person 1" / "Person 2"; set `person1_name` / `person2_name`). With a device
 tracker (`person1_tracker` / `person2_tracker`, a `device_tracker.*` entity),
 the figure is green while home and grey while away; tap it for details.
