@@ -22,7 +22,7 @@
  * so renamed entities keep working. No external libraries. The card has a visual
  * editor (ha-form).
  */
-const VERSION = "0.10.3";
+const VERSION = "0.10.4";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
@@ -277,7 +277,7 @@ class Open3eHeatpumpCard extends HTMLElement {
   // the floor and rises to the bathroom at the right end (shower, tap over the sink); it does not come
   // back. Two people at the house. Only the active loop is animated (dots travel along the pipes: flow
   // red, return blue); idle pipes stay coloured but fainter. Actual values in the text colour, targets
-  // in purple; the hot water actual and target are always shown.
+  // in purple; the hot water actual and target are always shown, stacked on top of the tank.
   _schematic() {
     if (this._config.temp_bar === false) return "";
     const t = this._t();
@@ -346,7 +346,7 @@ class Open3eHeatpumpCard extends HTMLElement {
     // Heating lanes run above the tank into the house; the hot water lanes end in the tank. Hot water
     // leaves the tank along the floor (y 316) and rises to the bathroom.
     const HPL = 8, HPR = 64, CX = 102, TX = 140, TW = 32, TY = 270, TH = 72, HL = 180, HRW = 560, EAVE = 100, APEX = 54;
-    const HR = 196, HF = 224, WF = 282, WR = 322, SY = 316, SX = 220, END = 344, RX = 540, RT = 120;
+    const HR = 166, HF = 194, WF = 282, WR = 322, SY = 316, SX = 220, END = 344, RX = 540, RT = 120;
     const ridge = (HL + HRW) / 2;
     let heat;
     if (storage === "none") {
@@ -357,9 +357,9 @@ class Open3eHeatpumpCard extends HTMLElement {
         ${pipe(`${END},${HR} ${sx1},${HR}`, RET, heatOn)}${pipe(`${sx0},${HR} ${HPR},${HR}`, RET, heatOn)}`;
       heat += storage === "buffer"
         ? `<g class="${this._id("buffer") ? "click" : ""}" data-entity="${esc(this._id("buffer"))}">
-            <rect x="${sx0}" y="182" width="52" height="56" rx="14" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>
-            ${buf !== null ? chip(SX, 210, buf, LINE, "buffer") : ""}</g>`
-        : `<rect x="${SX - 6}" y="184" width="12" height="52" rx="5" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>`;
+            <rect x="${sx0}" y="${HR - 14}" width="52" height="56" rx="14" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>
+            ${buf !== null ? chip(SX, HR + 14, buf, LINE, "buffer") : ""}</g>`
+        : `<rect x="${SX - 6}" y="${HR - 12}" width="12" height="52" rx="5" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>`;
     }
     // Tank fill: empty 15 K below the target, full at the target; purple once reached.
     const fill = tv !== null && tset !== null ? Math.min(1, Math.max(0.08, (tv - (tset - 15)) / 15)) : 0;
@@ -392,7 +392,7 @@ class Open3eHeatpumpCard extends HTMLElement {
           <path d="M${RX - 33},${RT + 28} L${RX - 38},${RT + 52} M${RX - 26},${RT + 28} V${RT + 54} M${RX - 19},${RT + 28} L${RX - 14},${RT + 52}" stroke-dasharray="3 5"/>
         </g>
         <g class="click" data-entity="${esc(this._id("climate") || this._id("flow_hk"))}">
-          ${radiator(280, 190, 38, 40, heatOn ? C.heat : LINE)}${radiator(326, 190, 38, 40, heatOn ? C.heat : LINE)}
+          ${radiator(280, HR - 6, 38, 40, heatOn ? C.heat : LINE)}${radiator(326, HR - 6, 38, 40, heatOn ? C.heat : LINE)}
         </g>
         <g class="click" data-entity="${esc(this._id("compressor"))}">
           <rect x="${HPL}" y="216" width="56" height="126" rx="6" fill="${BG}" stroke="${hpColor}" stroke-width="1.2"/>
@@ -403,8 +403,8 @@ class Open3eHeatpumpCard extends HTMLElement {
         ${dhwOn
           ? `${chip(CX, WF, wp, FLOW, "flow_wp")}${chip(CX, WR, ret, RET, "return")}`
           : `${chip(CX, HF, wp, FLOW, "flow_wp")}${chip(CX, HR, ret, RET, "return")}`}
-        ${vals(280, 142, hk, target, "flow_hk", "flow_target")}
-        ${vals(410, 142, tv, tset, "dhw", "dhw_set")}
+        ${vals(280, HR - 54, hk, target, "flow_hk", "flow_target")}
+        ${vals(HL - 31, TY - 48, tv, tset, "dhw", "dhw_set")}
         ${people}
       </svg></div>`;
   }

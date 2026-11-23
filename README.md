@@ -89,8 +89,8 @@ not come back. The tank fill shows the actual temperature against the target
 small dots travel along the active loop (flow red, return blue), idle pipes
 stay coloured but faint. All temperatures use the same text size: the
 actual value in the text colour, the target in purple; the hot water actual
-and target are always shown. The hot water values sit inside
-the house next to the bathroom. The buffer shows a temperature
+and target are always shown. The hot water values sit on top
+of the tank. The buffer shows a temperature
 only if a sensor is available (DID 279, or `entities: {buffer: sensor.x}`).
 Tap a value for its history. With *reduce motion* switched on in the
 OS/browser nothing moves.
