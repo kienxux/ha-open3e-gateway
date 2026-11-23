@@ -22,7 +22,7 @@
  * so renamed entities keep working. No external libraries. The card has a visual
  * editor (ha-form).
  */
-const VERSION = "0.10.4";
+const VERSION = "0.11.0";
 
 // tile key -> integration entity key (unique id without the config entry prefix)
 const KEYS = {
@@ -272,12 +272,13 @@ class Open3eHeatpumpCard extends HTMLElement {
 
   // System diagram in the style of a house cross-section (line art). Outside, left to right: the air
   // source heat pump (fan spins while the compressor runs), its flow/return (268/269) as outlined chips
-  // on the active loop, and a small hot water tank. The heating loop runs above the tank into the house:
-  // hydraulic separator / buffer tank (or nothing) and two radiators. Hot water leaves the tank along
-  // the floor and rises to the bathroom at the right end (shower, tap over the sink); it does not come
-  // back. Two people at the house. Only the active loop is animated (dots travel along the pipes: flow
-  // red, return blue); idle pipes stay coloured but fainter. Actual values in the text colour, targets
-  // in purple; the hot water actual and target are always shown, stacked on top of the tank.
+  // on the active loop, and a stack of two tanks: the heating storage (hydraulic separator or buffer
+  // tank, optional) on top of the hot water tank. From the heating storage the heating loop runs into
+  // the house to two radiators standing on the floor next to the people. Hot water leaves its tank
+  // along the floor and rises to the bathroom at the right end (shower, tap over the sink); it does
+  // not come back. Only the active loop is animated (dots travel along the pipes: flow red, return
+  // blue); idle pipes stay coloured but fainter. Actual and target share one chip ("41.4/39.9°"):
+  // the actual in the text colour, the target in purple. The hot water values sit at the bathroom.
   _schematic() {
     if (this._config.temp_bar === false) return "";
     const t = this._t();
@@ -330,36 +331,42 @@ class Open3eHeatpumpCard extends HTMLElement {
       const home = st?.state === "home";
       const name = String(this._config[`person${n}_name`] || st?.attributes?.friendly_name || `${t.person} ${n}`).slice(0, 12);
       const color = st ? (home ? C.ok : C.off) : LINE;
-      const x = n === 1 ? 390 : 445, f = 306;
+      const x = n === 1 ? 415 : 470, f = 306;
       return `<g class="${eid ? "click" : ""}" data-entity="${esc(eid)}" stroke="${color}" fill="none" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="${x}" cy="${f - 51}" r="8"/>
         <path d="M${x},${f - 42} V${f - 18} M${x - 14},${f - 31} L${x},${f - 39} L${x + 14},${f - 31} M${x},${f - 18} L${x - 10},${f} M${x},${f - 18} L${x + 10},${f}"/>
         <text x="${x}" y="329" text-anchor="middle" class="pn" stroke="none">${esc(name)}</text></g>`;
     };
     const people = this._config.show_people === false ? "" : person(1) + person(2);
-    const vals = (x, y, act, set, actTile, setTile) => `
-      ${chip(x, y, act, LINE, actTile)}
-      ${set !== null ? chip(x, y + 29, set, C.target, setTile, true) : ""}`;
+    // Actual and target in one chip: "41.4/39.9°", target in purple.
+    const pair = (x, y, act, set, tile) => {
+      const a = act === null ? "–" : this._n(act), b = set === null ? "" : `/${this._n(set)}`;
+      const w = Math.max(50, (a.length + b.length + 1) * 9.6 + 16), id = this._id(tile);
+      return `<g class="${id ? "click" : ""}" data-entity="${esc(id)}">
+        <rect x="${x - w / 2}" y="${y - 12}" width="${w}" height="24" rx="12" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>
+        <text x="${x}" y="${y + 5}" text-anchor="middle" class="tv">${esc(a)}${b ? `<tspan class="tgt">${esc(b)}</tspan>` : ""}°</text></g>`;
+    };
 
-    // Layout (left to right): heat pump 8–64, its flow/return chips, small hot water tank 140–172,
-    // house 180–560 (buffer, radiators, living area and bathroom). Ground line y 342.
-    // Heating lanes run above the tank into the house; the hot water lanes end in the tank. Hot water
-    // leaves the tank along the floor (y 316) and rises to the bathroom.
-    const HPL = 8, HPR = 64, CX = 102, TX = 140, TW = 32, TY = 270, TH = 72, HL = 180, HRW = 560, EAVE = 100, APEX = 54;
-    const HR = 166, HF = 194, WF = 282, WR = 322, SY = 316, SX = 220, END = 344, RX = 540, RT = 120;
+    // Layout: heat pump 8–64 (y 186–342), its flow/return chips at x 102, tank stack at x 140–172:
+    // heating storage y 196–256 on top of the hot water tank y 270–342. House 180–560, ground y 342.
+    // Primary heating lanes (HF/HR) and hot water lanes (WF/WR) all run between heat pump and tanks.
+    // Secondary heating loop: flow along y 210 to x 386, down to the radiators (y 268–306), return
+    // along y 298 and up into the storage. Hot water leaves along the floor (y 316) to the bathroom.
+    const HPL = 8, HPR = 64, HPT = 186, CX = 102, TX = 140, TW = 32, TY = 270, TH = 72, HL = 180, HRW = 560, EAVE = 100, APEX = 54;
+    const HF = 210, HR = 242, WF = 282, WR = 322, SY = 316, BY = 196, BH = 60, RX = 540, RT = 120;
+    const RAD = 290, RAD_Y = 268, RAD_H = 38, LOOP_X = 386, RF = 276, RR = 298, RV = 214;
     const ridge = (HL + HRW) / 2;
-    let heat;
-    if (storage === "none") {
-      heat = `${pipe(`${HPR},${HF} ${END},${HF} ${END},${HR}`, FLOW, heatOn)}${pipe(`${END},${HR} ${HPR},${HR}`, RET, heatOn)}`;
-    } else {
-      const sx0 = SX - 26, sx1 = SX + 26;
-      heat = `${pipe(`${HPR},${HF} ${sx0},${HF}`, FLOW, heatOn)}${pipe(`${sx1},${HF} ${END},${HF} ${END},${HR}`, FLOW, heatOn)}
-        ${pipe(`${END},${HR} ${sx1},${HR}`, RET, heatOn)}${pipe(`${sx0},${HR} ${HPR},${HR}`, RET, heatOn)}`;
+    // Storage edges where the primary lanes end and the secondary loop starts.
+    const [sx0, sx1] = storage === "buffer" ? [TX, TX + TW] : storage === "separator" ? [TX + 10, TX + TW - 10] : [HPR, HPR];
+    let heat = `${pipe(`${sx1},${HF} ${LOOP_X},${HF} ${LOOP_X},${RF} ${RAD + 10},${RF}`, FLOW, heatOn)}
+      ${pipe(`${RAD + 74},${RR} ${RV},${RR} ${RV},${HR} ${sx1},${HR}`, RET, heatOn)}`;
+    if (storage !== "none") {
+      heat += `${pipe(`${HPR},${HF} ${sx0},${HF}`, FLOW, heatOn)}${pipe(`${sx0},${HR} ${HPR},${HR}`, RET, heatOn)}`;
       heat += storage === "buffer"
         ? `<g class="${this._id("buffer") ? "click" : ""}" data-entity="${esc(this._id("buffer"))}">
-            <rect x="${sx0}" y="${HR - 14}" width="52" height="56" rx="14" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>
-            ${buf !== null ? chip(SX, HR + 14, buf, LINE, "buffer") : ""}</g>`
-        : `<rect x="${SX - 6}" y="${HR - 12}" width="12" height="52" rx="5" fill="${BG}" stroke="${LINE}" stroke-width="1.2"/>`;
+            <rect x="${TX}" y="${BY}" width="${TW}" height="${BH}" rx="12" fill="${BG}" stroke="${heatOn ? C.heat : LINE}" stroke-width="1.2"/>
+            ${buf !== null ? chip(TX + TW / 2 - 8, BY - 16, buf, LINE, "buffer") : ""}</g>`
+        : `<rect x="${sx0}" y="${BY}" width="${sx1 - sx0}" height="${BH}" rx="5" fill="${BG}" stroke="${heatOn ? C.heat : LINE}" stroke-width="1.2"/>`;
     }
     // Tank fill: empty 15 K below the target, full at the target; purple once reached.
     const fill = tv !== null && tset !== null ? Math.min(1, Math.max(0.08, (tv - (tset - 15)) / 15)) : 0;
@@ -392,19 +399,19 @@ class Open3eHeatpumpCard extends HTMLElement {
           <path d="M${RX - 33},${RT + 28} L${RX - 38},${RT + 52} M${RX - 26},${RT + 28} V${RT + 54} M${RX - 19},${RT + 28} L${RX - 14},${RT + 52}" stroke-dasharray="3 5"/>
         </g>
         <g class="click" data-entity="${esc(this._id("climate") || this._id("flow_hk"))}">
-          ${radiator(280, HR - 6, 38, 40, heatOn ? C.heat : LINE)}${radiator(326, HR - 6, 38, 40, heatOn ? C.heat : LINE)}
+          ${radiator(RAD, RAD_Y, 38, RAD_H, heatOn ? C.heat : LINE)}${radiator(RAD + 46, RAD_Y, 38, RAD_H, heatOn ? C.heat : LINE)}
         </g>
         <g class="click" data-entity="${esc(this._id("compressor"))}">
-          <rect x="${HPL}" y="216" width="56" height="126" rx="6" fill="${BG}" stroke="${hpColor}" stroke-width="1.2"/>
-          <circle cx="${HPL + 28}" cy="256" r="21" fill="none" stroke="${hpColor}" stroke-width="1.2"/>
-          <g transform="translate(${HPL + 28} 256)" stroke="${hpColor}" stroke-width="1.2" fill="none" stroke-linejoin="round"><g class="${comp ? "spin" : ""}">${petals}</g></g>
-          <path d="M${HPL + 10},300 H${HPL + 46} M${HPL + 10},310 H${HPL + 46} M${HPL + 10},320 H${HPL + 46}" stroke="${hpColor}" stroke-width="1.2" stroke-linecap="round"/>
+          <rect x="${HPL}" y="${HPT}" width="56" height="${342 - HPT}" rx="6" fill="${BG}" stroke="${hpColor}" stroke-width="1.2"/>
+          <circle cx="${HPL + 28}" cy="232" r="21" fill="none" stroke="${hpColor}" stroke-width="1.2"/>
+          <g transform="translate(${HPL + 28} 232)" stroke="${hpColor}" stroke-width="1.2" fill="none" stroke-linejoin="round"><g class="${comp ? "spin" : ""}">${petals}</g></g>
+          <path d="M${HPL + 10},296 H${HPL + 46} M${HPL + 10},306 H${HPL + 46} M${HPL + 10},316 H${HPL + 46}" stroke="${hpColor}" stroke-width="1.2" stroke-linecap="round"/>
         </g>
         ${dhwOn
           ? `${chip(CX, WF, wp, FLOW, "flow_wp")}${chip(CX, WR, ret, RET, "return")}`
           : `${chip(CX, HF, wp, FLOW, "flow_wp")}${chip(CX, HR, ret, RET, "return")}`}
-        ${vals(280, HR - 54, hk, target, "flow_hk", "flow_target")}
-        ${vals(HL - 31, TY - 48, tv, tset, "dhw", "dhw_set")}
+        ${pair(300, HF, hk, target, "flow_hk")}
+        ${pair(436, RT + 70, tv, tset, this._id("dhw_set") ? "dhw_set" : "dhw")}
         ${people}
       </svg></div>`;
   }

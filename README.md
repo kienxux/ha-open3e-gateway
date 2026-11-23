@@ -78,20 +78,21 @@ The system diagram is a line-art cross-section of the house. Outside, from
 left to right: the air-source heat pump (the fan spins while the compressor
 runs; outline grey when off, red while heating, orange while making hot
 water), its flow/return temperatures (268/269) in outlined chips on the pipes
-of the active loop, and a small hot water tank between the heat pump and the
-house. The heating loop runs above the tank into the house: a hydraulic
-separator (default), a buffer tank (`storage: buffer`) or nothing
-(`storage: none`), then two radiators. The hot water loop runs from the heat
-pump into the tank; hot water leaves the tank along the floor and rises to the
-bathroom at the right end of the house (shower, tap over the sink); it does
-not come back. The tank fill shows the actual temperature against the target
-(empty 15 K below, purple once reached). Pipes are thin with rounded corners;
-small dots travel along the active loop (flow red, return blue), idle pipes
-stay coloured but faint. All temperatures use the same text size: the
-actual value in the text colour, the target in purple; the hot water actual
-and target are always shown. The hot water values sit on top
-of the tank. The buffer shows a temperature
-only if a sensor is available (DID 279, or `entities: {buffer: sensor.x}`).
+of the active loop, and a stack of two tanks between the heat pump and the
+house: the heating storage on top — a hydraulic separator (default), a buffer
+tank (`storage: buffer`) or nothing (`storage: none`) — and the hot water tank
+below. From the heating storage the heating loop runs into the house to two
+radiators standing on the floor next to the people. Hot water leaves its tank
+along the floor and rises to the bathroom at the right end of the house
+(shower, tap over the sink); it does not come back. The tank fill shows the
+actual temperature against the target (empty 15 K below, purple once reached).
+Pipes are thin with rounded corners; small dots travel along the active loop
+(flow red, return blue), idle pipes stay coloured but faint. Actual and target
+share one chip, e.g. `41.4/39.9°`: the actual in the text colour, the target
+in purple. The heating values sit on the heating flow pipe, the hot water
+values at the shower and basin; both are always shown. The buffer shows a
+temperature only if a sensor is available (DID 279, or
+`entities: {buffer: sensor.x}`).
 Tap a value for its history. With *reduce motion* switched on in the
 OS/browser nothing moves.
 
